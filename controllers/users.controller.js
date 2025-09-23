@@ -2,49 +2,42 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 
+// Helpers
+const ACCESS_EXPIRES_IN = '15m';   // en dev puedes usar '8h'; en prod 15m es más seguro
+const REFRESH_EXPIRES_IN = '7d';
+
+function signAccessToken(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES_IN });
+}
+function signRefreshToken(payload) {
+  return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
+}
+
 exports.registerUser = async (req, res) => {
-    try {
-        const { userName, email, password } = req.body;
-        console.log("Datos recibidos:", req.body);
+  try {
+    const { userName, email, password, role } = req.body;
 
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            console.log("Usuario ya existe:", existingUser);
-            return res.status(400).json({ error: 'El usuario ya existe' });
-        }
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ error: 'El usuario ya existe' });
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        console.log("Contraseña encriptada:", hashedPassword);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ userName, email, password: hashedPassword, role });
+    await newUser.save();
 
-        const newUser = new User({ userName, email, password: hashedPassword });
-        await newUser.save();
-        console.log("Usuario guardado:", newUser);
-
-        return res.status(201).json({ message: 'Usuario registrado exitosamente' });
-    } catch (error) {
-        console.error("Error al registrar el usuario:", error);
-        res.status(500).json({ error: 'Error al registrar el usuario' });
-    }
+    return res.status(201).json({ message: 'Usuario registrado exitosamente' });
+  } catch (error) {
+    console.error("Error al registrar el usuario:", error);
+    res.status(500).json({ error: 'Error al registrar el usuario' });
+  }
 };
 
-
 exports.getUsers = async (req, res) => {
-    try {
-        const users = await User.find();
-        return res.status(200).json(
-            {
-                message: 'Usuarios obtenidos con éxito',
-                data: users
-            }
-        );
-    } catch (error) {
-        return res.status(500).json(
-            {
-                message: 'Error al consultar usuarios',
-                data: error
-            }
-        );
-    }
+  try {
+    const users = await User.find();
+    return res.status(200).json({ message: 'Usuarios obtenidos con éxito', data: users });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error al consultar usuarios', data: error });
+  }
 };
 
 exports.loginUser = async (req, res) => {
@@ -52,74 +45,133 @@ exports.loginUser = async (req, res) => {
     const { userName, password } = req.body;
 
     const user = await User.findOne({ userName });
-    if (!user) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
-    }
+    if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
-    }
+    if (!passwordMatch) return res.status(401).json({ error: 'Credenciales inválidas' });
 
-    // ✅ Usa la clave desde .env
-    const token = jwt.sign(
-      { userId: user._id, userName: user.userName },
-      process.env.JWT_SECRET, // 👍 se toma desde .env
-      { expiresIn: '8h' }
-    );
+    const payload = { userId: user._id, userName: user.userName, role: user.role };
 
-    const formatUser = {
-      _id: user._id,
-      userName: user.userName,
-      email: user.email,
-    };
+    // Access corto + Refresh largo (cookie HttpOnly)
+    const accessToken = signAccessToken(payload);
+    const refreshToken = signRefreshToken(payload);
 
-    return res.status(200).json({
-      user: formatUser,
-      token: token,
-      message: 'Inicio de sesión exitoso',
-    });
+    // (Opcional) Guarda refresh en BD para poder revocarlo luego
+    // await RefreshToken.create({ userId: user._id, token: refreshToken });
+
+    const formatUser = { _id: user._id, userName: user.userName, email: user.email, role: user.role };
+
+    return res
+      .cookie('refresh_token', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/auth', // limita el alcance de la cookie
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      })
+      .status(200)
+      .json({
+        user: formatUser,
+        token: accessToken, // <-- el access para Authorization: Bearer
+        message: 'Inicio de sesión exitoso'
+      });
 
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: 'Error al iniciar sesión' });
   }
 };
 
-/*
-exports.loginUser = async (req, res) => {
-    try {
-        const { userName, password } = req.body;
+// ===== Nuevo: emitir nuevo access con refresh válido =====
+exports.refreshToken = async (req, res) => {
+  try {
+    const token = req.cookies?.refresh_token;
+    if (!token) return res.status(401).json({ code: 'NO_REFRESH', error: 'Falta refresh token' });
 
-        await User.findOne({ userName })
-            .then(async user => {
-                if (!user) {
-                    return res.status(401).json({ error: 'Credenciales inválidas' });
-                }
+    // (Opcional) verifica en BD que ese refresh esté vigente
+    // const exists = await RefreshToken.findOne({ token });
+    // if (!exists) return res.status(401).json({ code: 'REFRESH_REVOKED', error: 'Refresh revocado' });
 
-                // Compara la contraseña ingresada con la almacenada en la base de datos
-                const passwordMatch = await bcrypt.compare(password, user.password);
-                if (!passwordMatch) {
-                    return res.status(401).json({ error: 'Credenciales inválidas' });
-                }
+    jwt.verify(token, process.env.JWT_REFRESH_SECRET, (err, user) => {
+      if (err) return res.status(401).json({ code: 'REFRESH_INVALID', error: 'Refresh inválido' });
 
-                // Formato de usuario para la respuesta
-                let formatUser = {
-                    _id: user._id,
-                    userName: user.userName,
-                    email: user.email,
-                };
+      const payload = { userId: user.userId, userName: user.userName, role: user.role };
+      const newAccess = signAccessToken(payload);
 
-                return res.status(200).json({
-                    user: formatUser,
-                    message: 'Inicio de sesión exitoso',
-                });
-            }).catch(err => {
-                return res.status(500).json({
-                    action: 'login',
-                    error: err.message || 'Error inesperado'
-                });
-            });
-    } catch (error) {
-        res.status(500).json({ error: 'Error al iniciar sesión' });
+      // (Opcional: rotación de refresh)
+      // const newRefresh = signRefreshToken(payload);
+      // await RefreshToken.deleteOne({ token });
+      // await RefreshToken.create({ userId: user.userId, token: newRefresh });
+      // res.cookie('refresh_token', newRefresh, { ...mismas opciones... });
+
+      return res.json({ token: newAccess });
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Error al refrescar token' });
+  }
+};
+
+// ===== Nuevo: logout (revoca refresh y limpia cookie) =====
+exports.logout = async (req, res) => {
+  try {
+    const token = req.cookies?.refresh_token;
+    if (token) {
+      // (Opcional) borrar de BD si lo guardaste
+      // await RefreshToken.deleteOne({ token });
     }
-};*/
+    res.clearCookie('refresh_token', { path: '/auth' });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Error al cerrar sesión' });
+  }
+};
+
+exports.updateUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { userName, email, role, password } = req.body;
+
+    if (req.userId !== userId && req.userRole !== 'admin') {
+      return res.status(403).json({ error: 'No tienes permisos para actualizar este usuario' });
+    }
+
+    const updateData = { userName, email, role };
+    if (req.userRole !== 'admin') delete updateData.role;
+
+    if (password && password.trim() !== '') {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateData.password = hashedPassword;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true, runValidators: true });
+    if (!updatedUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    return res.status(200).json({
+      message: 'Usuario actualizado correctamente',
+      user: { _id: updatedUser._id, userName: updatedUser.userName, email: updatedUser.email, role: updatedUser.role }
+    });
+  } catch (error) {
+    console.error("Error al actualizar usuario:", error);
+    return res.status(500).json({ error: 'Error al actualizar el usuario' });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    if (req.userId !== userId && req.userRole !== 'admin') {
+      return res.status(403).json({ error: 'No tienes permisos para eliminar este usuario' });
+    }
+
+    const deletedUser = await User.findByIdAndDelete(userId);
+    if (!deletedUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    return res.status(200).json({ message: 'Usuario eliminado correctamente', userId: deletedUser._id });
+  } catch (error) {
+    console.error('Error al eliminar usuario:', error);
+    return res.status(500).json({ error: 'Error al eliminar el usuario' });
+  }
+};

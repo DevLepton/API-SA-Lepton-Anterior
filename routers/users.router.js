@@ -9,4 +9,8 @@ router.get('/', authMiddleware.authenticateToken, userController.getUsers);
 
 router.post('/login', userController.loginUser);
 
+router.put('/:id', authMiddleware.authenticateToken, userController.updateUser);
+
+router.delete('/:id', authMiddleware.authenticateToken, userController.deleteUser);
+
 module.exports = router;
