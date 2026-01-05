@@ -1,5 +1,6 @@
 // controllers/device.controller.js
 const Device = require('../models/device.model'); // ajusta la ruta si es distinta
+const { logEvent } = require('../utils/events.logger');
 
 // === Config ===
 const ALLOWED_TYPES = ['gps', 'accessory', 'sim'];
@@ -65,7 +66,7 @@ function buildPayload(body, isUpdate = false, currentType = null) {
   } else {
     throw new Error('Tipo de dispositivo inválido');
   }
-
+  
   // comunes (status + fechas + opcionales)
   if (!isUpdate) validateStatus(status);
   const payload = {
@@ -90,6 +91,9 @@ exports.createDevice = async (req, res) => {
   try {
     const payload = buildPayload(req.body, false, null);
     const device = await Device.create(payload);
+
+    await logEvent({ req, identifier: device.iccid || device.imei, collectionName: 'Dispositivos', operation: 'Creación', document: device });
+
     return res.status(201).json({ message: 'Dispositivo creado correctamente', data: device });
   } catch (error) {
     const dup = translateDupKeyError(error);
@@ -156,6 +160,8 @@ exports.updateDevice = async (req, res) => {
       runValidators: true
     });
 
+    await logEvent({ req, identifier: updated.iccid || updated.imei, collectionName: 'Dispositivos', operation: 'Actualización', document: updated });
+
     return res.status(200).json({ message: 'Dispositivo actualizado correctamente', data: updated });
   } catch (error) {
     const dup = translateDupKeyError(error);
@@ -170,6 +176,8 @@ exports.deleteDevice = async (req, res) => {
     const { id } = req.params;
     const deleted = await Device.findByIdAndDelete(id);
     if (!deleted) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    await logEvent({ req, identifier: deleted.iccid || deleted.imei, collectionName: 'Dispositivos', operation: 'Eliminación', document: deleted });
 
     return res.status(200).json({ message: 'Dispositivo eliminado correctamente', deviceId: deleted._id });
   } catch (error) {

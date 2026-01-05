@@ -40,6 +40,7 @@ let clienteSchema = new mongoose.Schema(
   },
   {
     timestamps: true, // Agrega automáticamente campos de createdAt y updatedAt
+    versionKey: false
   }
 );
 

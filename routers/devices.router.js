@@ -3,7 +3,7 @@ const router = express.Router();
 const deviceController = require('../controllers/devices.controller');
 const authMiddleware = require('../utils/auth.middleware');
 
-router.post('/', /*authMiddleware.authenticateToken, */deviceController.createDevice);
+router.post('/', authMiddleware.authenticateToken, deviceController.createDevice);
 
 router.get('/', authMiddleware.authenticateToken, deviceController.getDevices);
 router.get('/:id', authMiddleware.authenticateToken, deviceController.getDeviceById);

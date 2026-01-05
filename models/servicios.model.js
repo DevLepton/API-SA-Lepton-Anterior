@@ -7,7 +7,7 @@ let servicioSchema = new mongoose.Schema({
     precio: { type: Number, required: true },
     precioConIVA: { type: Number, required: true },      // Precio del servicio
     codigo: { type: String, required: true },      // Código único del servicio
-});
+}, { versionKey: false });
 
 servicioSchema.plugin(AutoIncrement, { inc_field: 'idServ' });
 

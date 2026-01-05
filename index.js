@@ -13,6 +13,7 @@ const serviciosRouter = require('./routers/servicios.router');
 const clientesRouter = require('./routers/clientes.router');
 const pedidosRouter = require('./routers/pedidos.router');
 const devicesRouter = require('./routers/devices.router');
+const eventsRouter = require('./routers/events.router');
 
 const app = express();
 const port = 3003;
@@ -51,6 +52,8 @@ app.use('/clientes', clientesRouter);
 app.use('/pedidos', pedidosRouter);
 
 app.use('/devices', devicesRouter);
+
+app.use('/events', eventsRouter);
 
 app.listen(port, ()=> {
     console.log(`Servidor iniciado en http://localhost:${port}`);

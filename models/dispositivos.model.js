@@ -14,7 +14,7 @@ let dispositivoSchema = new mongoose.Schema({
     codigoSat: { type: String, required: true },
     unidad: { type: String, required: true },
     claveUnidad: { type: String, required: true },
-});
+}, { versionKey: false });
 
 dispositivoSchema.plugin(AutoIncrement, { inc_field: 'idDis' });
 

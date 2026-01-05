@@ -37,7 +37,7 @@ const pedidoSchema = new mongoose.Schema({
   precio: { type: Number, required: true }, // Precio base
   descuento: { type: Number, default: 0 }, // Descuento aplicado
   total: { type: Number, required: true }, // Precio total calculado
-});
+}, { versionKey: false });
 
 pedidoSchema.plugin(AutoIncrement, { inc_field: 'idPedido' });
 

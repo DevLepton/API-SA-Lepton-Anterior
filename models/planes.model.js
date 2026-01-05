@@ -12,7 +12,7 @@ let planSchema = new mongoose.Schema({
     claveUnidad: {type: String, required: true},
     color: {type: String, required: true},
     servicios: {type: Number, required: true},
-});
+}, { versionKey: false });
 
 planSchema.plugin(AutoIncrement, {inc_field: 'idPlan'});
 

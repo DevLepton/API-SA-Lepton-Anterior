@@ -24,7 +24,7 @@ const deviceSchema = new mongoose.Schema({
   installationDate: { type: Date, default: null, alias: 'instalationDate' },
   client: { type: String, trim: true, default: null },
   comments: { type: String, trim: true, default: null },
-});
+}, { versionKey: false });
 
 
 const Device = mongoose.model('Device', deviceSchema, 'devices');

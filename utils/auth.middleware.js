@@ -26,3 +26,15 @@ exports.authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+exports.requireAdmin = (req, res, next) => {
+  try {
+    const role = req.userRole; // viene de authenticateToken
+    if (role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado: se requiere rol admin' });
+    }
+    next();
+  } catch {
+    return res.status(403).json({ error: 'Acceso denegado' });
+  }
+}
