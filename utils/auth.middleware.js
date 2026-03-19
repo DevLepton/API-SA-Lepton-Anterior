@@ -27,14 +27,34 @@ exports.authenticateToken = (req, res, next) => {
   });
 };
 
-exports.requireAdmin = (req, res, next) => {
-  try {
-    const role = req.userRole; // viene de authenticateToken
-    if (role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado: se requiere rol admin' });
+exports.requireRole = (...allowedRoles) => {
+  return (req, res, next) => {
+    try {
+      const role = (req.userRole || '').toString().trim().toLowerCase();
+
+      // normaliza roles permitidos
+      const allowed = allowedRoles.map(r => (r || '').toString().trim().toLowerCase());
+
+      if (!role) {
+        return res.status(403).json({ error: 'Acceso denegado: rol no disponible' });
+      }
+
+      if (!allowed.includes(role)) {
+        return res.status(403).json({
+          error: `Acceso denegado: se requiere rol ${allowedRoles.join(' o ')}`
+        });
+      }
+
+      next();
+    } catch {
+      return res.status(403).json({ error: 'Acceso denegado' });
     }
-    next();
-  } catch {
-    return res.status(403).json({ error: 'Acceso denegado' });
-  }
-}
+  };
+};
+
+exports.requireAdmin = (req, res, next) =>
+  exports.requireRole('admin')(req, res, next);
+
+exports.requireInventory = (req, res, next) =>
+  exports.requireRole('inventario')(req, res, next);
+

@@ -18,14 +18,13 @@ const deviceSchema = new mongoose.Schema({
   company: { type: String, required: function () { return this.type === 'sim'; } },
 
   status: { type: String, enum: ['En inventario', 'En configuración', 'Instalado'], required: true, trim: true },
-  purchaseDate: { type: Date, required: true },
+  purchaseDate: { type: Date, required: function () { return this.type === 'sim'; }, default: null },
   entryDate: { type: Date, required: true },
 
   installationDate: { type: Date, default: null, alias: 'instalationDate' },
   client: { type: String, trim: true, default: null },
   comments: { type: String, trim: true, default: null },
 }, { versionKey: false });
-
 
 const Device = mongoose.model('Device', deviceSchema, 'devices');
 

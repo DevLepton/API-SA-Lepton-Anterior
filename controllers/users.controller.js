@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 
 // Helpers
-const ACCESS_EXPIRES_IN = '15m';   // en dev puedes usar '8h'; en prod 15m es más seguro
+const ACCESS_EXPIRES_IN = '8h';   // en dev puedes usar '8h'; en prod 15m es más seguro
 const REFRESH_EXPIRES_IN = '7d';
 
 function signAccessToken(payload) {

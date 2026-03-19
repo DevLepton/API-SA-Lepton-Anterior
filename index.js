@@ -14,6 +14,7 @@ const clientesRouter = require('./routers/clientes.router');
 const pedidosRouter = require('./routers/pedidos.router');
 const devicesRouter = require('./routers/devices.router');
 const eventsRouter = require('./routers/events.router');
+const requestsRouter = require('./routers/requests.router');
 
 const app = express();
 const port = 3003;
@@ -51,6 +52,7 @@ app.use('/servicios', serviciosRouter);
 app.use('/clientes', clientesRouter);
 app.use('/pedidos', pedidosRouter);
 
+app.use('/requests', requestsRouter);
 app.use('/devices', devicesRouter);
 
 app.use('/events', eventsRouter);

@@ -66,7 +66,7 @@ function buildPayload(body, isUpdate = false, currentType = null) {
   } else {
     throw new Error('Tipo de dispositivo inválido');
   }
-  
+
   // comunes (status + fechas + opcionales)
   if (!isUpdate) validateStatus(status);
   const payload = {
@@ -106,14 +106,51 @@ exports.createDevice = async (req, res) => {
 
 exports.getDevices = async (req, res) => {
   try {
-    const { type } = req.query;
-    const q = {};
-    if (type && ['gps','accessory','sim'].includes(type)) q.type = type;
+    const { type, status, includeIds } = req.query;
 
-    const items = await Device.find(q);
-    return res.status(200).json({ message: 'Dispositivos obtenidos con éxito', data: items });
+    const q = {};
+
+    if (type && ['gps', 'accessory', 'sim'].includes(type)) {
+      q.type = type;
+    }
+
+    if (status && ['En inventario', 'En configuración', 'Instalado'].includes(status)) {
+      q.status = status;
+    }
+
+    let items = await Device.find(q);
+
+    // 🔥 incluir dispositivos ya asignados
+    if (includeIds) {
+
+      const ids = includeIds.split(',');
+
+      const extra = await Device.find({
+        _id: { $in: ids }
+      });
+
+      const map = new Map();
+
+      [...items, ...extra].forEach(d => {
+        map.set(d._id.toString(), d);
+      });
+
+      items = Array.from(map.values());
+
+    }
+
+    return res.status(200).json({
+      message: 'Dispositivos obtenidos con éxito',
+      filters: q,
+      total: items.length,
+      data: items
+    });
+
   } catch (error) {
-    return res.status(500).json({ message: 'Error al consultar dispositivos', error: error.message });
+    return res.status(500).json({
+      message: 'Error al consultar dispositivos',
+      error: error.message
+    });
   }
 };
 
