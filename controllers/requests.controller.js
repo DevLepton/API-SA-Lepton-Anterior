@@ -131,7 +131,7 @@ function buildPayload(body, isUpdate = false) {
     devicesRequested: normalized,
     quantity: total,
 
-    comments: (comments ?? comentarios ?? null),
+    comments: (comments ?? comentarios ?? '').trim() || null,
   };
 }
 

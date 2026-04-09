@@ -17,6 +17,10 @@ const deviceSchema = new mongoose.Schema({
   iccid: { type: String, required: function () { return this.type === 'sim'; }, unique: true },
   company: { type: String, required: function () { return this.type === 'sim'; } },
 
+  netPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
+  grossPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
+  satCode: { type: String, default: null },
+
   status: { type: String, enum: ['En inventario', 'En configuración', 'Instalado'], required: true, trim: true },
   purchaseDate: { type: Date, required: function () { return this.type === 'sim'; }, default: null },
   entryDate: { type: Date, required: true },
@@ -25,6 +29,19 @@ const deviceSchema = new mongoose.Schema({
   client: { type: String, trim: true, default: null },
   comments: { type: String, trim: true, default: null },
 }, { versionKey: false });
+
+const transformDecimals = (doc, ret) => {
+  if (ret.netPrice instanceof mongoose.Types.Decimal128) {
+    ret.netPrice = ret.netPrice.toString();
+  }
+  if (ret.grossPrice instanceof mongoose.Types.Decimal128) {
+    ret.grossPrice = ret.grossPrice.toString();
+  }
+  return ret;
+};
+
+deviceSchema.set('toJSON', { transform: transformDecimals });
+deviceSchema.set('toObject', { transform: transformDecimals });
 
 const Device = mongoose.model('Device', deviceSchema, 'devices');
 

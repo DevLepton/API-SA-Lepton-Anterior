@@ -1,6 +1,7 @@
 // controllers/device.controller.js
 const Device = require('../models/device.model'); // ajusta la ruta si es distinta
 const { logEvent } = require('../utils/events.logger');
+const mongoose = require('mongoose');
 
 // === Config ===
 const ALLOWED_TYPES = ['gps', 'accessory', 'sim'];
@@ -26,6 +27,15 @@ function translateDupKeyError(err) {
   return null;
 }
 
+function toDecimal128OrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+
+  if (v && v._bsontype === 'Decimal128') return v;
+
+  return mongoose.Types.Decimal128.fromString(v.toString());
+}
+
+
 /**
  * Construye el payload final combinando:
  * - Campos específicos por tipo
@@ -37,6 +47,9 @@ function buildPayload(body, isUpdate = false, currentType = null) {
   const {
     type,
     name, brand, model, imei, sn, id, iccid, company,
+
+    // facturation
+    netPrice, grossPrice, satCode,
 
     // inventario
     status, purchaseDate, entryDate,
@@ -78,6 +91,10 @@ function buildPayload(body, isUpdate = false, currentType = null) {
     // alias soportado
     installationDate: toDateOrNull(installationDate ?? instalationDate ?? null),
 
+    netPrice: toDecimal128OrNull(netPrice),
+    grossPrice: toDecimal128OrNull(grossPrice),
+    satCode: (satCode === undefined ? null : satCode),
+
     // opcionales con default null en schema
     client: (client === undefined ? null : client),
     comments: (comments === undefined ? null : comments),
@@ -85,6 +102,7 @@ function buildPayload(body, isUpdate = false, currentType = null) {
 
   return payload;
 }
+
 
 /** Crea un dispositivo */
 exports.createDevice = async (req, res) => {
