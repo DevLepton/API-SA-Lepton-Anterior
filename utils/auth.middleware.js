@@ -2,17 +2,28 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 exports.authenticateToken = (req, res, next) => {
+
+  let token = null;
+
+  // 🔹 1. Header (caso normal)
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+
+  // 🔹 2. Query (SSE fallback)
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+
+  if (!token) {
     return res.status(401).json({ error: 'No se proporcionó un token de acceso' });
   }
 
-  const token = authHeader.split(' ')[1];
-
   jwt.verify(token, process.env.JWT_SECRET, (error, decoded) => {
+
     if (error) {
-      // console.log(error);
 
       if (error.name === 'TokenExpiredError') {
         return res.status(401).json({ error: 'Token expirado', code: 'TOKEN_EXPIRED' });
@@ -23,6 +34,7 @@ exports.authenticateToken = (req, res, next) => {
 
     req.userId = decoded.userId;
     req.userRole = decoded.role;
+
     next();
   });
 };

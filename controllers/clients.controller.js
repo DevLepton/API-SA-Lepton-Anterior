@@ -53,6 +53,15 @@ exports.updateExcludedAccounts = async (req, res) => {
 };
 
 exports.getFullClientsData = async (req, res) => {
+  // 🔥 HEADERS SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const send = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
   try {
     const now = Date.now();
 
@@ -61,15 +70,25 @@ exports.getFullClientsData = async (req, res) => {
 
     const cacheKey = `${includeSensors}-${includeLogin}`;
 
+    // ⚡ CACHE (si quieres puedes saltarte progreso aquí)
     if (cache[cacheKey] && (now - lastFetch[cacheKey] < CACHE_TIME)) {
-      return res.json(cache[cacheKey]);
+      send({
+        done: true,
+        progress: 100,
+        data: cache[cacheKey]
+      });
+      return res.end();
     }
 
     // ===== HASH =====
+    send({ progress: 5, message: 'Obteniendo hash...' });
+
     const hashRes = await fetch(NAVIXY_HASH_URL);
     const { hash } = await hashRes.json();
 
     // ===== BASE DATA =====
+    send({ progress: 15, message: 'Cargando clientes y trackers...' });
+
     const [clientsRes, trackersRes, plansRes, config] = await Promise.all([
       fetch(CLIENTS_URL + hash),
       fetch(TRACKERS_URL + hash),
@@ -79,11 +98,9 @@ exports.getFullClientsData = async (req, res) => {
 
     const clientsData = await clientsRes.json();
     const trackersData = await trackersRes.json();
+    const plansData = await plansRes.json();
 
     const hashList = config?.activeClients || {};
-    const excludedAccounts = config?.excludedAccounts || [];
-
-    const plansData = await plansRes.json();
 
     const clientes = clientsData.list || [];
     const trackers = trackersData.list || [];
@@ -92,6 +109,8 @@ exports.getFullClientsData = async (req, res) => {
     const planById = new Map(plans.map(p => [p.id, p.name]));
 
     // ===== TRACKERS MAP =====
+    send({ progress: 25, message: 'Procesando trackers...' });
+
     const trackersByClient = new Map();
 
     trackers.forEach(t => {
@@ -107,52 +126,58 @@ exports.getFullClientsData = async (req, res) => {
     });
 
     // ===== CLIENTES BASE =====
-    // const clientesBase = [];
+    send({ progress: 35, message: 'Construyendo clientes...' });
 
-    // for (const c of clientes) {
-    //   const trackersCliente = trackersByClient.get(c.id) || [];
-    //   if (!trackersCliente.length) continue;
-
-    //   const clientHash = hashList[String(c.id)];
-    //   if (!clientHash) continue;
-
-    //   clientesBase.push({
-    //     raw: c,
-    //     trackers: trackersCliente,
-    //     hash: clientHash
-    //   });
-    // }
-
-    // ===== CLIENTES BASE (SIN FILTRO) 🔥
     const clientesBase = clientes.map(c => {
       const trackersCliente = trackersByClient.get(c.id) || [];
-      const clientHash = hashList.get(String(c.id)) || null;
+
+      const clientHash = hashList?.get
+        ? hashList.get(String(c.id))
+        : hashList[String(c.id)];
 
       return {
         raw: c,
         trackers: trackersCliente,
-        hash: clientHash
+        hash: clientHash || null
       };
     });
 
-    // ===== LOGIN (CONDICIONAL) 🔥
+    // ===== LOGIN =====
     let loginResults = [];
 
     if (includeLogin) {
-      // const loginTasks = clientesBase.map(c => () =>
-      //   getUltimoIngreso(c.hash, c.raw)
-      // );
-      const loginTasks = clientesBase.map(c => async () => {
-        if (!c.hash) return 'Sin hash registrado';
-        return getUltimoIngreso(c.hash, c.raw);
-      });
+      send({ progress: 45, message: 'Consultando últimos ingresos...' });
 
-      loginResults = await batchRequests(loginTasks, 20);
+      loginResults = [];
+
+      const total = clientesBase.length;
+      const batchSize = 20;
+
+      for (let i = 0; i < total; i += batchSize) {
+        const chunk = clientesBase.slice(i, i + batchSize);
+
+        const resChunk = await Promise.all(
+          chunk.map(async (c) => {
+            if (!c.hash) return 'Sin hash registrado';
+            return getUltimoIngreso(c.hash, c.raw);
+          })
+        );
+
+        loginResults.push(...resChunk);
+
+        // 🔥 progreso dinámico
+        send({
+          progress: 45 + Math.floor((i / total) * 15),
+          message: `Procesando logins (${Math.min(i + batchSize, total)}/${total})`
+        });
+      }
     } else {
       loginResults = clientesBase.map(() => '');
     }
 
     // ===== CLIENTES FINAL =====
+    send({ progress: 65, message: 'Armando respuesta...' });
+
     let clientesFinal = clientesBase.map((c, i) => {
       const trackers = c.trackers;
 
@@ -161,30 +186,44 @@ exports.getFullClientsData = async (req, res) => {
         nombre: `${c.raw.first_name || ''} ${c.raw.last_name || ''}`,
         login: c.raw.login,
         ciudad: c.raw.post_city,
-
         trackers,
-        // hash: c.hash,
-
-        // 🔥 SOLO DATOS CRUDOS
         ultimoIngreso: loginResults[i],
         hasHidden: trackers.some(t => t.hidden)
       };
     });
 
-    // ===== SENSORES (CONDICIONAL) 🔥
+    // ===== SENSORES =====
     if (includeSensors) {
+      send({ progress: 70, message: 'Consultando sensores...' });
 
-      const sensorTasks = clientesBase.map(c => async () => {
-        const clientHash = c.hash;
+      const total = clientesBase.length;
+      const batchSize = 20;
 
-        if (!clientHash || !c.trackers.length) return null;
+      const sensoresResultados = [];
 
-        const sensores = await getSensorsByClient(clientHash, c.trackers);
+      for (let i = 0; i < total; i += batchSize) {
+        const chunk = clientesBase.slice(i, i + batchSize);
 
-        return { clientId: c.id, sensores };
-      });
+        const resChunk = await Promise.all(
+          chunk.map(async (c) => {
+            if (!c.hash || !c.trackers.length) return null;
 
-      const sensoresResultados = await batchRequests(sensorTasks, 20);
+            const sensores = await getSensorsByClient(c.hash, c.trackers);
+
+            return {
+              clientId: c.raw.id,
+              sensores
+            };
+          })
+        );
+
+        sensoresResultados.push(...resChunk);
+
+        send({
+          progress: 70 + Math.floor((i / total) * 20),
+          message: `Procesando sensores (${Math.min(i + batchSize, total)}/${total})`
+        });
+      }
 
       const sensoresByCliente = new Map();
 
@@ -213,21 +252,34 @@ exports.getFullClientsData = async (req, res) => {
       });
     }
 
-    // ===== KPIs =====
-
+    // ===== RESPONSE =====
     const response = {
       clientes: clientesFinal
     };
 
-    // ===== CACHE SAVE =====
+    // ===== CACHE =====
     cache[cacheKey] = response;
     lastFetch[cacheKey] = now;
 
-    res.json(response);
+    send({ progress: 95, message: 'Finalizando...' });
+
+    send({
+      done: true,
+      progress: 100,
+      data: response
+    });
+
+    res.end();
 
   } catch (error) {
     console.error('Error full-data:', error.message);
-    res.status(500).json({ error: 'Error obteniendo datos' });
+
+    send({
+      error: true,
+      message: error.message
+    });
+
+    res.end();
   }
 };
 
@@ -292,16 +344,34 @@ function mapTracker(t, planById) {
   };
 }
 
-async function safeFetch(url) {
+async function safeFetch(url, retries = 3) {
   try {
     const res = await fetch(url);
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
 
     return await res.json();
-  } catch {
+
+  } catch (err) {
+    if (retries > 0) {
+      await new Promise(r => setTimeout(r, 1500));
+      return safeFetch(url, retries - 1);
+    }
+
     return null;
   }
+}
+
+function chunkArray(arr, size) {
+  const res = [];
+
+  for (let i = 0; i < arr.length; i += size) {
+    res.push(arr.slice(i, i + size));
+  }
+
+  return res;
 }
 
 // ===== SENSORES =====
@@ -312,10 +382,27 @@ async function getSensorsByClient(hash, trackers) {
 
   if (!ids.length) return {};
 
-  const url = `${SENSOR_BATCH_URL}${hash}&trackers=[${ids.join(',')}]`;
+  // 🔥 dividir en chunks de 10 trackers
+  const chunks = chunkArray(ids, 10);
 
-  const data = await safeFetch(url);
-  return data?.result || {};
+  const finalResult = {};
+
+  for (const chunk of chunks) {
+    const url = `${SENSOR_BATCH_URL}${hash}&trackers=[${chunk.join(',')}]`;
+    const data = await safeFetch(url);
+
+    if (!data || !data.result) {
+      continue;
+    }
+
+    // 🔥 merge resultados
+    Object.assign(finalResult, data.result);
+
+    // 🔥 delay entre requests (MUY IMPORTANTE)
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  return finalResult;
 }
 
 // ===== EXTRAER SENSORES =====
@@ -350,7 +437,7 @@ function extractSensors(sensorArr) {
 }
 
 // ===== BATCH (ANTI RATE LIMIT) =====
-async function batchRequests(tasks, size = 20) {
+async function batchRequests(tasks, size = 30) {  
   const results = [];
 
   for (let i = 0; i < tasks.length; i += size) {
@@ -359,7 +446,8 @@ async function batchRequests(tasks, size = 20) {
     const res = await Promise.all(chunk.map(fn => fn()));
     results.push(...res);
 
-    await new Promise(r => setTimeout(r, 1000));
+    // 🔥 delay más grande
+    await new Promise(r => setTimeout(r, 500));
   }
 
   return results;

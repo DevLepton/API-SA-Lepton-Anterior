@@ -21,7 +21,7 @@ router.get('/', authMiddleware.authenticateToken, requireAdmin, userController.g
 
 router.post('/login', userController.loginUser);
 
-router.put('/:id', authMiddleware.authenticateToken, requireAdmin, userController.updateUser);
+router.put('/:id', authMiddleware.authenticateToken, userController.updateUser);
 
 router.delete('/:id', authMiddleware.authenticateToken, requireAdmin, userController.deleteUser);
 

@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
+const { logEvent } = require('../utils/events.logger');
 
 // Helpers
 const ACCESS_EXPIRES_IN = '8h';   // en dev puedes usar '8h'; en prod 15m es más seguro
@@ -24,6 +25,14 @@ exports.registerUser = async (req, res) => {
     const newUser = new User({ userName, email, password: hashedPassword, role });
     await newUser.save();
 
+    await logEvent({
+      req,
+      identifier: newUser._id,
+      collectionName: 'Usuarios',
+      operation: 'Creación',
+      document: newUser
+    });
+
     return res.status(201).json({ message: 'Usuario registrado exitosamente' });
   } catch (error) {
     console.error("Error al registrar el usuario:", error);
@@ -42,9 +51,15 @@ exports.getUsers = async (req, res) => {
 
 exports.loginUser = async (req, res) => {
   try {
-    const { userName, password } = req.body;
+    const { userName, email, password } = req.body;
 
-    const user = await User.findOne({ userName });
+    const user = await User.findOne({
+      $or: [
+        userName ? { userName } : null,
+        email ? { email } : null
+      ].filter(Boolean)
+    });
+    
     if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
@@ -131,22 +146,55 @@ exports.logout = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const userId = req.params.id;
-    const { userName, email, role, password } = req.body;
+    const { userName, email, role, password, currentPassword } = req.body;
 
     if (req.userId !== userId && req.userRole !== 'admin') {
       return res.status(403).json({ error: 'No tienes permisos para actualizar este usuario' });
     }
 
-    const updateData = { userName, email, role };
-    if (req.userRole !== 'admin') delete updateData.role;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const updateData = {};
+
+    if (userName !== undefined) updateData.userName = userName;
+    if (email !== undefined) updateData.email = email;
+
+    if (req.userRole === 'admin' && role !== undefined) {
+      updateData.role = role;
+    }
 
     if (password && password.trim() !== '') {
+
+      // Validar contraseña actual (solo si NO es admin)
+      if (req.userRole !== 'admin') {
+        if (!currentPassword) {
+          return res.status(400).json({ error: 'Debes proporcionar la contraseña actual' });
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+          return res.status(400).json({ error: 'Contraseña actual incorrecta' });
+        }
+      }
+
+      // Hashear nueva contraseña
       const hashedPassword = await bcrypt.hash(password, 10);
       updateData.password = hashedPassword;
     }
 
     const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true, runValidators: true });
     if (!updatedUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    await logEvent({
+      req,
+      identifier: updatedUser._id,
+      collectionName: 'Usuarios',
+      operation: 'Actualización',
+      document: updatedUser
+    });
 
     return res.status(200).json({
       message: 'Usuario actualizado correctamente',
@@ -169,6 +217,14 @@ exports.deleteUser = async (req, res) => {
     const deletedUser = await User.findByIdAndDelete(userId);
     if (!deletedUser) return res.status(404).json({ error: 'Usuario no encontrado' });
 
+    await logEvent({
+      req,
+      identifier: deletedUser._id,
+      collectionName: 'Usuarios',
+      operation: 'Eliminación',
+      document: deletedUser
+    });
+    
     return res.status(200).json({ message: 'Usuario eliminado correctamente', userId: deletedUser._id });
   } catch (error) {
     console.error('Error al eliminar usuario:', error);

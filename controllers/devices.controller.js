@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 
 // === Config ===
 const ALLOWED_TYPES = ['gps', 'accessory', 'sim'];
-const STATUS_ENUM = ['En inventario', 'En configuración', 'Instalado']; // los mismos del schema
+const STATUS_ENUM = ['En inventario', 'En configuración', 'Instalado', 'Listo para usar']; // los mismos del schema
 
 // === Helpers ===
 function toDateOrNull(v) {
@@ -132,7 +132,7 @@ exports.getDevices = async (req, res) => {
       q.type = type;
     }
 
-    if (status && ['En inventario', 'En configuración', 'Instalado'].includes(status)) {
+    if (status && ['En inventario', 'En configuración', 'Instalado', 'Listo para usar'].includes(status)) {
       q.status = status;
     }
 

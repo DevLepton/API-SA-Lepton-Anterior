@@ -21,7 +21,7 @@ const deviceSchema = new mongoose.Schema({
   grossPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
   satCode: { type: String, default: null },
 
-  status: { type: String, enum: ['En inventario', 'En configuración', 'Instalado'], required: true, trim: true },
+  status: { type: String, enum: ['En inventario', 'En configuración', 'Instalado', 'Listo para usar'], required: true, trim: true },
   purchaseDate: { type: Date, required: function () { return this.type === 'sim'; }, default: null },
   entryDate: { type: Date, required: true },
 
