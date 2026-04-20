@@ -183,7 +183,7 @@ exports.getFullClientsData = async (req, res) => {
 
       return {
         id: c.raw.id,
-        nombre: `${c.raw.first_name || ''} ${c.raw.last_name || ''}`,
+        nombre: `${c.raw.first_name || ''} ${c.raw.middle_name || ''} ${c.raw.last_name || ''}`,
         login: c.raw.login,
         ciudad: c.raw.post_city,
         trackers,
