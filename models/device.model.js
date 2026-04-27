@@ -4,23 +4,29 @@ const deviceSchema = new mongoose.Schema({
   type: { type: String, enum: ['gps', 'accessory', 'sim'], required: true },
 
   // GPS
-  name: { type: String, required: function () { return this.type === 'gps' || this.type === 'accessory'; } },
+  name: { type: String, default: null },
+  supplier: { type: String, default: null },
   brand: { type: String, required: function () { return this.type === 'gps' || this.type === 'accessory'; } },
   model: { type: String, required: true },
-  imei: { type: String, required: function () { return this.type === 'gps'; }, unique: true },
-  sn: { type: String, required: function () { return this.type !== 'sim'; }, unique: true },
+  imei: { type: String, required: function () { return this.type === 'gps'; }, unique: true, sparse: true },
+  sn: { type: String, required: function () { return this.type !== 'sim'; }, unique: true, sparse: true },
 
   // Accesorio
-  id: { type: String, required: function () { return this.type === 'accessory'; }, unique: true },
+  id: { type: String, required: function () { return this.type === 'accessory'; }, unique: true, sparse: true },
 
   // SIM
-  iccid: { type: String, required: function () { return this.type === 'sim'; }, unique: true },
+  iccid: { type: String, required: function () { return this.type === 'sim'; }, unique: true, sparse: true },
   company: { type: String, required: function () { return this.type === 'sim'; } },
 
+  usage: { type: String, required: function () { return this.type === 'sim'; }, default: 'GPS' },
+
+  // phoneNumber tipo número 523112531765 1722343209688
+  phoneNumber: { type: String, default: null },
+  
   netPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
   grossPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
   satCode: { type: String, default: null },
-
+  
   status: { type: String, enum: ['En inventario', 'En configuración', 'Instalado', 'Listo para usar'], required: true, trim: true },
   purchaseDate: { type: Date, required: function () { return this.type === 'sim'; }, default: null },
   entryDate: { type: Date, required: true },

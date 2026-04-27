@@ -46,7 +46,7 @@ function toDecimal128OrNull(v) {
 function buildPayload(body, isUpdate = false, currentType = null) {
   const {
     type,
-    name, brand, model, imei, sn, id, iccid, company,
+    name, brand, model, imei, sn, id, iccid, company, usage, phoneNumber, supplier,
 
     // facturation
     netPrice, grossPrice, satCode,
@@ -71,11 +71,11 @@ function buildPayload(body, isUpdate = false, currentType = null) {
   // específicos por tipo
   let specific = {};
   if (t === 'gps') {
-    specific = { type: 'gps', name, brand, model, imei, sn };
+    specific = { type: 'gps', name, brand, model, imei, sn, phoneNumber };
   } else if (t === 'accessory') {
     specific = { type: 'accessory', name, brand, model, id, sn };
   } else if (t === 'sim') {
-    specific = { type: 'sim', iccid, model, company };
+    specific = { type: 'sim', iccid, model, company, usage, phoneNumber };
   } else {
     throw new Error('Tipo de dispositivo inválido');
   }
@@ -85,6 +85,7 @@ function buildPayload(body, isUpdate = false, currentType = null) {
   const payload = {
     ...specific,
     status, // validado arriba
+    supplier: (supplier === undefined ? null : supplier), // opcional con default null en schema
     purchaseDate: toDateOrNull(purchaseDate), // requerido en schema (Date)
     entryDate: toDateOrNull(entryDate),       // requerido en schema (Date)
 
@@ -109,8 +110,8 @@ exports.createDevice = async (req, res) => {
   try {
     const payload = buildPayload(req.body, false, null);
     const device = await Device.create(payload);
-
-    await logEvent({ req, identifier: device.iccid || device.imei, collectionName: 'Dispositivos', operation: 'Creación', document: device });
+    
+    await logEvent({ req, identifier: device.iccid || device.imei || device.id, collectionName: 'Dispositivos', operation: 'Creación', document: device });
 
     return res.status(201).json({ message: 'Dispositivo creado correctamente', data: device });
   } catch (error) {
@@ -214,8 +215,8 @@ exports.updateDevice = async (req, res) => {
       new: true,
       runValidators: true
     });
-
-    await logEvent({ req, identifier: updated.iccid || updated.imei, collectionName: 'Dispositivos', operation: 'Actualización', document: updated });
+    
+    await logEvent({ req, identifier: updated.iccid || updated.imei || updated.id, collectionName: 'Dispositivos', operation: 'Actualización', document: updated });
 
     return res.status(200).json({ message: 'Dispositivo actualizado correctamente', data: updated });
   } catch (error) {
@@ -232,7 +233,7 @@ exports.deleteDevice = async (req, res) => {
     const deleted = await Device.findByIdAndDelete(id);
     if (!deleted) return res.status(404).json({ error: 'Dispositivo no encontrado' });
 
-    await logEvent({ req, identifier: deleted.iccid || deleted.imei, collectionName: 'Dispositivos', operation: 'Eliminación', document: deleted });
+    await logEvent({ req, identifier: deleted.iccid || deleted.imei || deleted.id, collectionName: 'Dispositivos', operation: 'Eliminación', document: deleted });
 
     return res.status(200).json({ message: 'Dispositivo eliminado correctamente', deviceId: deleted._id });
   } catch (error) {

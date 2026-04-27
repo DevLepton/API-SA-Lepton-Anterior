@@ -183,7 +183,9 @@ exports.getFullClientsData = async (req, res) => {
 
       return {
         id: c.raw.id,
-        nombre: `${c.raw.first_name || ''} ${c.raw.middle_name || ''} ${c.raw.last_name || ''}`,
+        nombre: `${c.raw.first_name || ''} ${c.raw.middle_name || ''} ${c.raw.last_name || ''}`
+          .replace(/\s+/g, ' ')
+          .trim(),
         login: c.raw.login,
         ciudad: c.raw.post_city,
         trackers,
@@ -290,7 +292,9 @@ function mapTracker(t, planById) {
   let lastUTC = t.last_connection || t.creation_date;
   let dt = new Date(lastUTC.replace(' ', 'T'));
 
-  dt.setHours(dt.getHours() + tzOffset);
+  if (process.env.NODE_ENV === 'development') {
+    dt.setHours(dt.getHours() + tzOffset);
+  }
 
   const now = new Date();
   const minutos = Math.floor((now - dt) / 60000);
@@ -316,12 +320,20 @@ function mapTracker(t, planById) {
 
   let status = 'ok';
 
-  if (minutos > 720) {
-    if (minutos > 525600) status = 'Offline + 1A';
-    else if (minutos > 259200) status = 'Offline + 6M';
-    else if (minutos > 43200) status = 'Offline + 1M';
-    else if (minutos > 21600) status = 'Offline + 15D';
-    else if (minutos > 1440) status = 'Offline + 1D';
+  const YEAR = 525600;
+
+  if (minutos >= 720) {
+
+    if (minutos >= YEAR * 5) status = 'Offline + 5A';
+    else if (minutos >= YEAR * 4) status = 'Offline + 4A';
+    else if (minutos >= YEAR * 3) status = 'Offline + 3A';
+    else if (minutos >= YEAR * 2) status = 'Offline + 2A';
+    else if (minutos >= YEAR) status = 'Offline + 1A';
+
+    else if (minutos >= 259200) status = 'Offline + 6M';
+    else if (minutos >= 43200) status = 'Offline + 1M';
+    else if (minutos >= 21600) status = 'Offline + 15D';
+    else if (minutos >= 1440) status = 'Offline + 1D';
     else status = 'Offline + 12H';
   }
 
@@ -336,7 +348,9 @@ function mapTracker(t, planById) {
     suspendido: t.source?.blocked || false,
     hidden: t.deleted || false,
     ultimaConexionUTC: t.last_connection,
-    ultimaConexionLocal: dt.toLocaleString('es-MX'),
+    ultimaConexionLocal: dt.toLocaleString('es-MX', {
+      timeZone: 'America/Mexico_City'
+    }),
     minutosOffline: minutos,
     tiempoOffline: tiempo,
     statusSoporte: status,
@@ -437,7 +451,7 @@ function extractSensors(sensorArr) {
 }
 
 // ===== BATCH (ANTI RATE LIMIT) =====
-async function batchRequests(tasks, size = 30) {  
+async function batchRequests(tasks, size = 30) {
   const results = [];
 
   for (let i = 0; i < tasks.length; i += size) {

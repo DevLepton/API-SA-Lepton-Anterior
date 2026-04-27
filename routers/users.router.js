@@ -19,6 +19,8 @@ router.post('/', authMiddleware.authenticateToken, requireAdmin, userController.
 
 router.get('/', authMiddleware.authenticateToken, requireAdmin, userController.getUsers);
 
+router.get('/profile', authMiddleware.authenticateToken, userController.getProfile);
+
 router.post('/login', userController.loginUser);
 
 router.put('/:id', authMiddleware.authenticateToken, userController.updateUser);

@@ -49,6 +49,20 @@ exports.getUsers = async (req, res) => {
   }
 };
 
+exports.getProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('_id userName email role');
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    return res.json({ user });
+  } catch (error) {
+    return res.status(500).json({ error: 'Error al obtener usuario' });
+  }
+};
+
 exports.loginUser = async (req, res) => {
   try {
     const { userName, email, password } = req.body;
@@ -59,7 +73,7 @@ exports.loginUser = async (req, res) => {
         email ? { email } : null
       ].filter(Boolean)
     });
-    
+
     if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
@@ -224,7 +238,7 @@ exports.deleteUser = async (req, res) => {
       operation: 'Eliminación',
       document: deletedUser
     });
-    
+
     return res.status(200).json({ message: 'Usuario eliminado correctamente', userId: deletedUser._id });
   } catch (error) {
     console.error('Error al eliminar usuario:', error);
