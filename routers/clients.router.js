@@ -12,6 +12,8 @@ router.put('/config/excluded', auth.authenticateToken, clientsCtrl.updateExclude
 
 router.get('/full-data', auth.authenticateToken, clientsCtrl.getFullClientsData);
 
+router.get('/navixy-trackers/:userId', auth.authenticateToken, clientsCtrl.getNavixyTrackersByUser);
+
 // /** Lectura */
 // router.get('/', auth.authenticateToken, eventsCtrl.listEvents);
 // router.get('/:id', auth.authenticateToken, eventsCtrl.getEventById);

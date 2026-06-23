@@ -46,7 +46,7 @@ function toDecimal128OrNull(v) {
 function buildPayload(body, isUpdate = false, currentType = null) {
   const {
     type,
-    name, brand, model, imei, sn, id, iccid, company, usage, phoneNumber, supplier,
+    name, brand, model, imei, sn, id, iccid, company, usage, phoneNumber, supplier, configured,
 
     // facturation
     netPrice, grossPrice, satCode,
@@ -73,7 +73,7 @@ function buildPayload(body, isUpdate = false, currentType = null) {
   if (t === 'gps') {
     specific = { type: 'gps', name, brand, model, imei, sn, phoneNumber };
   } else if (t === 'accessory') {
-    specific = { type: 'accessory', name, brand, model, id, sn };
+    specific = { type: 'accessory', name, brand, model, id, sn, configured };
   } else if (t === 'sim') {
     specific = { type: 'sim', iccid, model, company, usage, phoneNumber };
   } else {
@@ -238,5 +238,79 @@ exports.deleteDevice = async (req, res) => {
     return res.status(200).json({ message: 'Dispositivo eliminado correctamente', deviceId: deleted._id });
   } catch (error) {
     return res.status(500).json({ error: 'Error al eliminar el dispositivo' });
+  }
+};
+
+exports.bulkUpdateDevices = async (req, res) => {
+  try {
+
+    const { ids, payload } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        error: 'ids es requerido'
+      });
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({
+        error: 'payload es requerido'
+      });
+    }
+
+    const devices = await Device.find({
+      _id: { $in: ids }
+    });
+
+    if (devices.length === 0) {
+      return res.status(404).json({
+        error: 'Dispositivos no encontrados'
+      });
+    }
+
+    const updates = [];
+
+    for (const existing of devices) {
+
+      if (payload.status !== undefined) {
+        validateStatus(payload.status);
+      }
+
+      const finalPayload = buildPayload(
+        {
+          ...existing.toObject(),
+          ...payload
+        },
+        true,
+        existing.type
+      );
+
+      updates.push({
+        updateOne: {
+          filter: { _id: existing._id },
+          update: finalPayload
+        }
+      });
+    }
+
+    await Device.bulkWrite(updates);
+
+    return res.status(200).json({
+      message: `${updates.length} dispositivos actualizados`
+    });
+
+  } catch (error) {
+
+    const dup = translateDupKeyError(error);
+
+    if (dup) {
+      return res.status(400).json({
+        error: dup
+      });
+    }
+
+    return res.status(400).json({
+      error: error.message || 'Error al actualizar dispositivos'
+    });
   }
 };

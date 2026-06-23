@@ -256,7 +256,9 @@ exports.getFullClientsData = async (req, res) => {
 
     // ===== RESPONSE =====
     const response = {
-      clientes: clientesFinal
+      clients: clientesFinal,
+      includeSensors,
+      includeLogin
     };
 
     // ===== CACHE =====
@@ -540,4 +542,47 @@ async function getUltimoIngreso(hash, cliente) {
   } catch (e) {
     return 'ERROR LOGIN';
   }
+
 }
+
+exports.getNavixyTrackersByUser = async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+
+    const hashData = await safeFetch(NAVIXY_HASH_URL);
+
+    if (!hashData?.hash) {
+      throw new Error('No se pudo obtener hash de Navixy');
+    }
+
+    const hash = hashData.hash;
+
+    const trackersData = await safeFetch(TRACKERS_URL + hash);
+
+    if (!trackersData) {
+      throw new Error('No se pudieron obtener trackers');
+    }
+
+    const trackers = trackersData?.list || [];
+
+    const userTrackers = trackers.filter(t => t.user_id === userId);
+
+    res.json({
+      ok: true,
+      total: userTrackers.length,
+      trackers: userTrackers.map(t => ({
+        id: t.id,
+        imei: t.source?.device_id || '',
+        label: t.label
+      }))
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Error al consultar trackers'
+    });
+  }
+};

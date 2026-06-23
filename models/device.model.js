@@ -9,10 +9,25 @@ const deviceSchema = new mongoose.Schema({
   brand: { type: String, required: function () { return this.type === 'gps' || this.type === 'accessory'; } },
   model: { type: String, required: true },
   imei: { type: String, required: function () { return this.type === 'gps'; }, unique: true, sparse: true },
-  sn: { type: String, required: function () { return this.type !== 'sim'; }, unique: true, sparse: true },
+  // sn: { type: String, required: function () { return this.type !== 'sim'; }, unique: true, sparse: true },
+  sn: { type: String, required: function () { return this.type === 'gps'; }, default: null },
 
   // Accesorio
   id: { type: String, required: function () { return this.type === 'accessory'; }, unique: true, sparse: true },
+  configured: {
+    type: Boolean,
+    default: null,
+    validate: {
+      validator: function (value) {
+        if (value === null || value === undefined) return true;
+
+        const type = this.get?.('type') || this.type;
+
+        return type === 'accessory';
+      },
+      message: 'configured solo aplica para accesorios'
+    }
+  },
 
   // SIM
   iccid: { type: String, required: function () { return this.type === 'sim'; }, unique: true, sparse: true },
@@ -22,11 +37,11 @@ const deviceSchema = new mongoose.Schema({
 
   // phoneNumber tipo número 523112531765 1722343209688
   phoneNumber: { type: String, default: null },
-  
+
   netPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
   grossPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
   satCode: { type: String, default: null },
-  
+
   status: { type: String, enum: ['En inventario', 'En configuración', 'Instalado', 'Listo para usar'], required: true, trim: true },
   purchaseDate: { type: Date, required: function () { return this.type === 'sim'; }, default: null },
   entryDate: { type: Date, required: true },
@@ -45,6 +60,17 @@ const transformDecimals = (doc, ret) => {
   }
   return ret;
 };
+
+// deviceSchema.index(
+//   { sn: 1 },
+//   {
+//     unique: true,
+//     partialFilterExpression: {
+//       type: 'gps',
+//       sn: { $type: 'string' }
+//     }
+//   }
+// );
 
 deviceSchema.set('toJSON', { transform: transformDecimals });
 deviceSchema.set('toObject', { transform: transformDecimals });

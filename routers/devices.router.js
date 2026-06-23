@@ -8,6 +8,7 @@ router.post('/', authMiddleware.authenticateToken, authMiddleware.requireInvento
 router.get('/', authMiddleware.authenticateToken, deviceController.getDevices);
 router.get('/:id', authMiddleware.authenticateToken, deviceController.getDeviceById);
 
+router.put('/bulk', authMiddleware.authenticateToken, deviceController.bulkUpdateDevices);
 router.put('/:id', authMiddleware.authenticateToken, deviceController.updateDevice);
 
 router.delete('/:id', authMiddleware.authenticateToken, authMiddleware.requireInventory, deviceController.deleteDevice);
