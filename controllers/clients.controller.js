@@ -54,12 +54,19 @@ exports.updateExcludedAccounts = async (req, res) => {
 
 exports.getFullClientsData = async (req, res) => {
   // 🔥 HEADERS SSE
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  res.flushHeaders?.();
+  res.socket?.setNoDelay?.(true);
 
   const send = (data) => {
+    if (res.writableEnded) return;
+
     res.write(`data: ${JSON.stringify(data)}\n\n`);
+    res.flush?.();
   };
 
   try {
@@ -148,7 +155,7 @@ exports.getFullClientsData = async (req, res) => {
     if (includeLogin) {
       send({ progress: 45, message: 'Consultando últimos ingresos...' });
 
-      loginResults = [];
+      loginResults = new Array(clientesBase.length);
 
       const total = clientesBase.length;
       const batchSize = 20;
@@ -163,12 +170,16 @@ exports.getFullClientsData = async (req, res) => {
           })
         );
 
-        loginResults.push(...resChunk);
+        resChunk.forEach((value, index) => {
+          loginResults[i + index] = value;
+        });
 
         // 🔥 progreso dinámico
+        const completed = Math.min(i + batchSize, total);
+
         send({
-          progress: 45 + Math.floor((i / total) * 15),
-          message: `Procesando logins (${Math.min(i + batchSize, total)}/${total})`
+          progress: 45 + Math.floor((completed / total) * 15),
+          message: `Procesando logins (${completed}/${total})`
         });
       }
     } else {
@@ -221,9 +232,11 @@ exports.getFullClientsData = async (req, res) => {
 
         sensoresResultados.push(...resChunk);
 
+        const completed = Math.min(i + batchSize, total);
+
         send({
-          progress: 70 + Math.floor((i / total) * 20),
-          message: `Procesando sensores (${Math.min(i + batchSize, total)}/${total})`
+          progress: 70 + Math.floor((completed / total) * 20),
+          message: `Procesando sensores (${completed}/${total})`
         });
       }
 
@@ -563,9 +576,11 @@ exports.getNavixyTrackersByUser = async (req, res) => {
       throw new Error('No se pudieron obtener trackers');
     }
 
-    const trackers = trackersData?.list || [];
+    const trackers = (trackersData?.list || []).filter(t => !t.clone);
 
-    const userTrackers = trackers.filter(t => t.user_id === userId);
+    const userTrackers = userId === 0 ? trackers : trackers.filter(t => t.user_id === userId);
+
+    // const userTrackers = trackers.filter(t => t.user_id === userId);
 
     res.json({
       ok: true,

@@ -294,7 +294,7 @@ exports.bulkUpdateDevices = async (req, res) => {
     }
 
     await Device.bulkWrite(updates);
-
+    
     return res.status(200).json({
       message: `${updates.length} dispositivos actualizados`
     });
