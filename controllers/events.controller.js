@@ -29,10 +29,19 @@ exports.listEvents = async (req, res) => {
 
         const where = {};
 
+        // Restringir por usuario si no es admin
+        if (req.userRole !== 'admin') {
+            where['user._id'] = req.userId;
+        }
+
         if (identifier) where.identifier = identifier;
         if (collectionName) where.collectionName = collectionName;
         if (operation) where.operation = operation;
-        if (userId) where['user._id'] = userId;
+
+        // Solo el admin puede filtrar por otro usuario
+        if (req.userRole === 'admin' && userId) {
+            where['user._id'] = userId;
+        }
 
         if (from || to) {
             where.createdAt = {};
@@ -84,8 +93,19 @@ exports.listEvents = async (req, res) => {
 exports.getEventById = async (req, res) => {
     try {
         const ev = await Event.findById(req.params.id).select('-__v').lean();
-        if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
-        return res.status(200).json({ message: 'Evento obtenido', data: ev });
+
+        if (!ev) {
+            return res.status(404).json({ error: 'Evento no encontrado' });
+        }
+
+        if (req.userRole !== 'admin' && String(ev.user?._id) !== String(req.userId)) {
+            return res.status(403).json({ error: 'Acceso denegado' });
+        }
+
+        return res.status(200).json({
+            message: 'Evento obtenido',
+            data: ev
+        });
     } catch (error) {
         return res.status(500).json({ error: 'Error al consultar el evento', detail: error?.message });
     }
@@ -94,11 +114,25 @@ exports.getEventById = async (req, res) => {
 /** DELETE /events/:id (solo admin) */
 exports.deleteEventById = async (req, res) => {
     try {
+        if (req.userRole !== 'admin') {
+            return res.status(403).json({ error: 'Solo los administradores pueden eliminar eventos' });
+        }
+
         const deleted = await Event.findByIdAndDelete(req.params.id).select('-__v').lean();
-        if (!deleted) return res.status(404).json({ error: 'Evento no encontrado' });
-        return res.status(200).json({ message: 'Evento eliminado', data: deleted });
+
+        if (!deleted) {
+            return res.status(404).json({ error: 'Evento no encontrado' });
+        }
+
+        return res.status(200).json({
+            message: 'Evento eliminado',
+            data: deleted
+        });
     } catch (error) {
-        return res.status(500).json({ error: 'Error al eliminar el evento', detail: error?.message });
+        return res.status(500).json({
+            error: 'Error al eliminar el evento',
+            detail: error?.message
+        });
     }
 };
 
@@ -108,13 +142,21 @@ exports.deleteEventById = async (req, res) => {
  */
 exports.bulkDelete = async (req, res) => {
     try {
+        if (req.userRole !== 'admin') {
+            return res.status(403).json({ error: 'Solo los administradores pueden eliminar eventos', message: 'Solo los administradores pueden eliminar eventos' });
+        }
+
         const { identifier, collectionName, operation, userId, q, from, to } = req.query;
 
         const where = {};
+
         if (identifier) where.identifier = identifier;
         if (collectionName) where.collectionName = collectionName;
         if (operation) where.operation = operation;
-        if (userId) where['user._id'] = userId;
+
+        if (userId) {
+            where['user._id'] = userId;
+        }
 
         if (from || to) {
             where.createdAt = {};
@@ -125,6 +167,7 @@ exports.bulkDelete = async (req, res) => {
         if (q) {
             const safe = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const rx = new RegExp(safe, 'i');
+
             where.$or = [
                 { identifier: rx },
                 { collectionName: rx },
@@ -136,12 +179,16 @@ exports.bulkDelete = async (req, res) => {
         }
 
         const result = await Event.deleteMany(where);
+
         return res.status(200).json({
             message: 'Eventos eliminados',
-            deletedCount: result?.deletedCount || 0,
+            deletedCount: result.deletedCount || 0,
         });
     } catch (error) {
-        return res.status(500).json({ error: 'Error en eliminación masiva', detail: error?.message });
+        return res.status(500).json({
+            error: 'Error en eliminación masiva',
+            detail: error?.message
+        });
     }
 };
 

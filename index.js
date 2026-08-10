@@ -16,6 +16,13 @@ const devicesRouter = require('./routers/devices.router');
 const eventsRouter = require('./routers/events.router');
 const requestsRouter = require('./routers/requests.router');
 const clientsRouter = require('./routers/clients.router');
+const quotesRouter = require('./routers/quotes.router');
+const foreignTechniciansRouter = require('./routers/foreignTechnicians.router');
+const productsRouter = require('./routers/products.router');
+const billingClientsRouter = require('./routers/billingClients.router');
+const travelExpensesRouter = require('./routers/travelExpenses.router');
+const travelExpensesExtrasRouter = require('./routers/travelExpensesExtras.router');
+const suggestionsRouter = require('./routers/suggestions.router');
 
 const app = express();
 const port = process.env.PORT;
@@ -61,6 +68,13 @@ app.use('/devices', devicesRouter);
 app.use('/events', eventsRouter);
 
 app.use('/clients', clientsRouter);
+app.use('/quotes', quotesRouter);
+app.use('/foreignTechnicians', foreignTechniciansRouter);
+app.use('/products', productsRouter);
+app.use('/billingClients', billingClientsRouter);
+app.use('/travelExpenses', travelExpensesRouter);
+app.use('/travelExpensesExtras', travelExpensesExtrasRouter);
+app.use('/suggestions', suggestionsRouter);
 
 app.listen(port, ()=> {
     console.log(`Servidor iniciado en http://localhost:${port}`);

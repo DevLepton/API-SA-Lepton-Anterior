@@ -6,11 +6,15 @@ const clientsCtrl = require('../controllers/clients.controller');
 
 router.get('/config', auth.authenticateToken, clientsCtrl.getClientConfig);
 
+router.get('/config/:dataType(active|excluded)', auth.authenticateToken, clientsCtrl.getClientConfigData);
+
 router.put('/config/active', auth.authenticateToken, clientsCtrl.updateActiveClients);
 
 router.put('/config/excluded', auth.authenticateToken, clientsCtrl.updateExcludedAccounts);
 
 router.get('/full-data', auth.authenticateToken, clientsCtrl.getFullClientsData);
+
+router.get('/list', auth.authenticateToken, clientsCtrl.getClientsList);
 
 router.get('/navixy-trackers/:userId', auth.authenticateToken, clientsCtrl.getNavixyTrackersByUser);
 

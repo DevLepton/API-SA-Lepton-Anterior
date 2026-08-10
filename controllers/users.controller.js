@@ -10,8 +10,41 @@ const REFRESH_EXPIRES_IN = '7d';
 function signAccessToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES_IN });
 }
+
 function signRefreshToken(payload) {
   return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
+}
+
+const ROLE_PREFIX = {
+  admin: 'AD',
+  soporte: 'SP',
+  finanzas: 'FZ',
+  inventario: 'IN',
+  cx: 'CX',
+  gc: 'GC'
+};
+
+async function generateUserId(role) {
+  const prefix = ROLE_PREFIX[role];
+
+  if (!prefix) {
+    throw new Error('Rol inválido');
+  }
+
+  const lastUser = await User.findOne({
+    userId: new RegExp(`^LC${prefix}`)
+  }).sort({ userId: -1 });
+
+  let next = 1;
+
+  if (lastUser) {
+    const match = lastUser.userId.match(/(\d+)$/);
+    if (match) {
+      next = parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `LC${prefix}${next}`;
 }
 
 exports.registerUser = async (req, res) => {
@@ -22,7 +55,16 @@ exports.registerUser = async (req, res) => {
     if (existingUser) return res.status(400).json({ error: 'El usuario ya existe' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({ userName, email, password: hashedPassword, role });
+    const generatedUserId = await generateUserId(role);
+
+    const newUser = new User({
+      userId: generatedUserId,
+      userName,
+      email,
+      password: hashedPassword,
+      role
+    });
+
     await newUser.save();
 
     await logEvent({
@@ -88,7 +130,7 @@ exports.loginUser = async (req, res) => {
     // (Opcional) Guarda refresh en BD para poder revocarlo luego
     // await RefreshToken.create({ userId: user._id, token: refreshToken });
 
-    const formatUser = { _id: user._id, userName: user.userName, email: user.email, role: user.role };
+    const formatUser = { _id: user._id, userId: user.userId, userName: user.userName, email: user.email, role: user.role };
 
     return res
       .cookie('refresh_token', refreshToken, {
@@ -114,30 +156,54 @@ exports.loginUser = async (req, res) => {
 // ===== Nuevo: emitir nuevo access con refresh válido =====
 exports.refreshToken = async (req, res) => {
   try {
-    const token = req.cookies?.refresh_token;
-    if (!token) return res.status(401).json({ code: 'NO_REFRESH', error: 'Falta refresh token' });
+    const refreshToken = req.cookies?.refresh_token;
 
-    // (Opcional) verifica en BD que ese refresh esté vigente
-    // const exists = await RefreshToken.findOne({ token });
-    // if (!exists) return res.status(401).json({ code: 'REFRESH_REVOKED', error: 'Refresh revocado' });
+    if (!refreshToken) {
+      return res.status(401).json({
+        code: 'NO_REFRESH',
+        error: 'Falta refresh token'
+      });
+    }
 
-    jwt.verify(token, process.env.JWT_REFRESH_SECRET, (err, user) => {
-      if (err) return res.status(401).json({ code: 'REFRESH_INVALID', error: 'Refresh inválido' });
+    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err, user) => {
+      if (err) {
+        return res.status(401).json({
+          code: 'REFRESH_INVALID',
+          error: 'Refresh token inválido o expirado'
+        });
+      }
 
-      const payload = { userId: user.userId, userName: user.userName, role: user.role };
-      const newAccess = signAccessToken(payload);
+      const payload = {
+        userId: user.userId,
+        userName: user.userName,
+        role: user.role
+      };
 
-      // (Opcional: rotación de refresh)
-      // const newRefresh = signRefreshToken(payload);
-      // await RefreshToken.deleteOne({ token });
-      // await RefreshToken.create({ userId: user.userId, token: newRefresh });
-      // res.cookie('refresh_token', newRefresh, { ...mismas opciones... });
+      // Nuevo access
+      const newAccessToken = signAccessToken(payload);
 
-      return res.json({ token: newAccess });
+      // Nuevo refresh
+      const newRefreshToken = signRefreshToken(payload);
+
+      res.cookie('refresh_token', newRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/auth',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+
+      return res.json({
+        token: newAccessToken
+      });
     });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: 'Error al refrescar token' });
+
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: 'Error al refrescar token'
+    });
   }
 };
 
@@ -177,7 +243,13 @@ exports.updateUser = async (req, res) => {
     if (email !== undefined) updateData.email = email;
 
     if (req.userRole === 'admin' && role !== undefined) {
-      updateData.role = role;
+      // Si el rol cambió, generar un nuevo userId
+      if (role !== user.role) {
+        updateData.role = role;
+        updateData.userId = await generateUserId(role);
+      } else {
+        updateData.role = role;
+      }
     }
 
     if (password && password.trim() !== '') {
@@ -212,7 +284,7 @@ exports.updateUser = async (req, res) => {
 
     return res.status(200).json({
       message: 'Usuario actualizado correctamente',
-      user: { _id: updatedUser._id, userName: updatedUser.userName, email: updatedUser.email, role: updatedUser.role }
+      user: { _id: updatedUser._id, userId: updatedUser.userId, userName: updatedUser.userName, email: updatedUser.email, role: updatedUser.role }
     });
   } catch (error) {
     console.error("Error al actualizar usuario:", error);

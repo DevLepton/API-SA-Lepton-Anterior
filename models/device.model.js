@@ -38,8 +38,8 @@ const deviceSchema = new mongoose.Schema({
   // phoneNumber tipo número 523112531765 1722343209688
   phoneNumber: { type: String, default: null },
 
-  netPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
-  grossPrice: { type: mongoose.Schema.Types.Decimal128, default: null },
+  netPrice: { type: Number, default: null },
+  grossPrice: { type: Number, default: null },
   satCode: { type: String, default: null },
 
   status: { type: String, enum: ['En inventario', 'En configuración', 'Instalado', 'Listo para usar'], required: true, trim: true },
@@ -50,30 +50,6 @@ const deviceSchema = new mongoose.Schema({
   client: { type: String, trim: true, default: null },
   comments: { type: String, trim: true, default: null },
 }, { versionKey: false });
-
-const transformDecimals = (doc, ret) => {
-  if (ret.netPrice instanceof mongoose.Types.Decimal128) {
-    ret.netPrice = ret.netPrice.toString();
-  }
-  if (ret.grossPrice instanceof mongoose.Types.Decimal128) {
-    ret.grossPrice = ret.grossPrice.toString();
-  }
-  return ret;
-};
-
-// deviceSchema.index(
-//   { sn: 1 },
-//   {
-//     unique: true,
-//     partialFilterExpression: {
-//       type: 'gps',
-//       sn: { $type: 'string' }
-//     }
-//   }
-// );
-
-deviceSchema.set('toJSON', { transform: transformDecimals });
-deviceSchema.set('toObject', { transform: transformDecimals });
 
 const Device = mongoose.model('Device', deviceSchema, 'devices');
 

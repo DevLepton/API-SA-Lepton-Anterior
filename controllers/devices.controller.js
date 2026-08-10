@@ -1,7 +1,7 @@
 // controllers/device.controller.js
 const Device = require('../models/device.model'); // ajusta la ruta si es distinta
 const { logEvent } = require('../utils/events.logger');
-const mongoose = require('mongoose');
+// const mongoose = require('mongoose');
 
 // === Config ===
 const ALLOWED_TYPES = ['gps', 'accessory', 'sim'];
@@ -27,14 +27,17 @@ function translateDupKeyError(err) {
   return null;
 }
 
-function toDecimal128OrNull(v) {
+function toNumberOrNull(v) {
   if (v === null || v === undefined || v === '') return null;
 
-  if (v && v._bsontype === 'Decimal128') return v;
+  const n = Number(v);
 
-  return mongoose.Types.Decimal128.fromString(v.toString());
+  if (Number.isNaN(n)) {
+    throw new Error('Precio inválido');
+  }
+
+  return n;
 }
-
 
 /**
  * Construye el payload final combinando:
@@ -92,8 +95,8 @@ function buildPayload(body, isUpdate = false, currentType = null) {
     // alias soportado
     installationDate: toDateOrNull(installationDate ?? instalationDate ?? null),
 
-    netPrice: toDecimal128OrNull(netPrice),
-    grossPrice: toDecimal128OrNull(grossPrice),
+    netPrice: toNumberOrNull(netPrice),
+    grossPrice: toNumberOrNull(grossPrice),
     satCode: (satCode === undefined ? null : satCode),
 
     // opcionales con default null en schema
@@ -110,7 +113,7 @@ exports.createDevice = async (req, res) => {
   try {
     const payload = buildPayload(req.body, false, null);
     const device = await Device.create(payload);
-    
+
     await logEvent({ req, identifier: device.iccid || device.imei || device.id, collectionName: 'Dispositivos', operation: 'Creación', document: device });
 
     return res.status(201).json({ message: 'Dispositivo creado correctamente', data: device });
@@ -215,7 +218,7 @@ exports.updateDevice = async (req, res) => {
       new: true,
       runValidators: true
     });
-    
+
     await logEvent({ req, identifier: updated.iccid || updated.imei || updated.id, collectionName: 'Dispositivos', operation: 'Actualización', document: updated });
 
     return res.status(200).json({ message: 'Dispositivo actualizado correctamente', data: updated });
@@ -294,7 +297,7 @@ exports.bulkUpdateDevices = async (req, res) => {
     }
 
     await Device.bulkWrite(updates);
-    
+
     return res.status(200).json({
       message: `${updates.length} dispositivos actualizados`
     });

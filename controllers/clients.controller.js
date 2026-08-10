@@ -26,6 +26,49 @@ exports.getClientConfig = async (req, res) => {
   res.json(config);
 };
 
+// GET activo / excluidos
+exports.getClientConfigData = async (req, res) => {
+  try {
+    const { dataType } = req.params;
+    let config = await ClientConfig.findOne();
+
+    if (!config) {
+      config = await ClientConfig.create({});
+    }
+
+    const dataByType = {
+      active: {
+        activeClients: config.activeClients || {}
+      },
+      excluded: {
+        excludedAccounts: config.excludedAccounts || []
+      }
+    };
+
+    const data = dataByType[dataType];
+
+    if (!data) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Tipo de configuracion no valido'
+      });
+    }
+
+    res.json({
+      ok: true,
+      ...data
+    });
+
+  } catch (error) {
+    console.error('Error client-config-data:', error.message);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Error al consultar configuracion'
+    });
+  }
+};
+
 // UPDATE activos
 exports.updateActiveClients = async (req, res) => {
   const { activeClients } = req.body;
@@ -50,6 +93,38 @@ exports.updateExcludedAccounts = async (req, res) => {
   );
 
   res.json(config);
+};
+
+exports.getClientsList = async (req, res) => {
+  try {
+    const hashData = await safeFetch(NAVIXY_HASH_URL);
+
+    if (!hashData?.hash) {
+      throw new Error('No se pudo obtener hash de Navixy');
+    }
+
+    const clientsData = await safeFetch(CLIENTS_URL + hashData.hash);
+
+    if (!clientsData) {
+      throw new Error('No se pudo obtener la lista de clientes');
+    }
+
+    const clients = clientsData.list || [];
+
+    res.json({
+      ok: true,
+      total: clients.length,
+      clients
+    });
+
+  } catch (error) {
+    console.error('Error clients-list:', error.message);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Error al consultar clientes'
+    });
+  }
 };
 
 exports.getFullClientsData = async (req, res) => {
