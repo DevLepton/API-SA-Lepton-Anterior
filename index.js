@@ -23,6 +23,7 @@ const billingClientsRouter = require('./routers/billingClients.router');
 const travelExpensesRouter = require('./routers/travelExpenses.router');
 const travelExpensesExtrasRouter = require('./routers/travelExpensesExtras.router');
 const suggestionsRouter = require('./routers/suggestions.router');
+const bankAccountsRouter = require('./routers/bankAccounts.router');
 
 const app = express();
 const port = process.env.PORT;
@@ -75,6 +76,7 @@ app.use('/billingClients', billingClientsRouter);
 app.use('/travelExpenses', travelExpensesRouter);
 app.use('/travelExpensesExtras', travelExpensesExtrasRouter);
 app.use('/suggestions', suggestionsRouter);
+app.use('/bankAccounts', bankAccountsRouter);
 
 app.listen(port, ()=> {
     console.log(`Servidor iniciado en http://localhost:${port}`);

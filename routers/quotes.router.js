@@ -10,6 +10,7 @@ router.get('/:id', authMiddleware.authenticateToken, quotesController.getQuoteBy
 
 router.put('/:id', authMiddleware.authenticateToken, authMiddleware.requireAdmin, quotesController.updateQuote);
 
+router.delete('/', authMiddleware.authenticateToken, authMiddleware.requireAdmin, quotesController.deleteQuotes);
 router.delete('/:id', authMiddleware.authenticateToken, authMiddleware.requireAdmin, quotesController.deleteQuote);
 
 module.exports = router;

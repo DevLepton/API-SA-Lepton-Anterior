@@ -10,6 +10,7 @@ router.get('/:id', authMiddleware.authenticateToken, productsController.getProdu
 
 router.put('/:id', authMiddleware.authenticateToken, productsController.updateProduct);
 
+router.delete('/', authMiddleware.authenticateToken, productsController.deleteProducts);
 router.delete('/:id', authMiddleware.authenticateToken, productsController.deleteProduct);
 
 module.exports = router;

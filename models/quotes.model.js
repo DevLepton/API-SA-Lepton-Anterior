@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const productSchema = new mongoose.Schema({
     name: { type: String, required: true },
     description: { type: String, default: null },
+    type: { type: String, default: null },
     price: { type: Number, required: true },
     priceIVA: { type: Number, required: true },
     discount: { type: Number, default: 0 },
@@ -13,7 +14,7 @@ const productSchema = new mongoose.Schema({
 
 const quoteSchema = new mongoose.Schema({
     quoteNum: { type: String, required: true, unique: true, trim: true },
-    userId: { type: String, required: true, trim: true },
+    userName: { type: String, required: true, trim: true },
 
     clientName: { type: String, required: true, trim: true },
     companyName: { type: String, default: null, trim: true },

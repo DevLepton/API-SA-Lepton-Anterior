@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Product = require('../models/products.model');
 const { logEvent } = require('../utils/events.logger');
 
@@ -197,4 +198,47 @@ exports.deleteProduct = async (req, res) => {
   } catch (error) {
     return res.status(500).json({ error: 'Error al eliminar el producto' });
   }
+};
+
+exports.deleteProducts = async (req, res) => {
+    try {
+        const { ids } = req.body;
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'Debes proporcionar al menos un producto para eliminar' });
+        }
+
+        const invalidIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
+
+        if (invalidIds.length) {
+            return res.status(400).json({ error: 'Uno o más IDs de producto no son válidos' });
+        }
+
+        const products = await Product.find({ _id: { $in: ids } });
+
+        if (!products.length) {
+            return res.status(404).json({ error: 'No se encontraron los productos seleccionados' });
+        }
+
+        await Product.deleteMany({ _id: { $in: ids } });
+
+        for (const product of products) {
+            await logEvent({
+                req,
+                identifier: product.name,
+                collectionName: 'Productos',
+                operation: 'Eliminación',
+                document: product
+            });
+        }
+
+        return res.status(200).json({
+            message: `${products.length} producto${products.length === 1 ? '' : 's'} eliminado${products.length === 1 ? '' : 's'} correctamente`,
+            deletedCount: products.length,
+            productIds: products.map(product => product._id)
+        });
+    } catch (error) {
+        console.error('Error al eliminar productos:', error);
+        return res.status(500).json({ error: 'Error al eliminar los productos' });
+    }
 };

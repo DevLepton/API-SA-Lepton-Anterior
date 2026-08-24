@@ -1,4 +1,6 @@
+const mongoose = require('mongoose');
 const Quote = require('../models/quotes.model');
+const User = require('../models/user.model');
 const Counter = require('../models/counter.model');
 const { logEvent } = require('../utils/events.logger');
 
@@ -77,6 +79,7 @@ function buildProducts(products) {
         return {
             name: String(item.name).trim(),
             description: String(item.description ?? '').trim() || null,
+            type: String(item.type ?? '').trim() || null,
             price: toNumber(item.price, `products[${index}].price`, { required: true }),
             priceIVA: toNumber(item.priceIVA, `products[${index}].priceIVA`, { required: true }),
             discount: toNumber(item.discount, `products[${index}].discount`, { defaultValue: 0 }),
@@ -90,7 +93,7 @@ function buildProducts(products) {
 function buildPayload(body, isUpdate = false) {
     const {
         quoteNum,
-        userId,
+        userName,
         clientName,
         companyName,
         place,
@@ -113,13 +116,13 @@ function buildPayload(body, isUpdate = false) {
     } = body;
 
     if (!isUpdate) {
-        if (!userId) throw new Error('El campo "userId" es requerido');
+        // if (!userId) throw new Error('El campo "userId" es requerido');
         if (!clientName) throw new Error('El campo "clientName" es requerido');
     }
 
     return {
         quoteNum: quoteNum ? String(quoteNum).trim() : undefined,
-        userId: String(userId ?? '').trim(),
+        userName: String(userName ?? '').trim(),
         clientName: String(clientName ?? '').trim(),
         companyName: String(companyName ?? '').trim() || null,
         place: String(place ?? '').trim() || null,
@@ -144,8 +147,26 @@ function buildPayload(body, isUpdate = false) {
 
 exports.createQuote = async (req, res) => {
     try {
-        const payload = buildPayload(req.body);
-        payload.quoteNum = await generateQuoteNumber(payload.userId);
+        const bodyUserId = req.userId;
+
+        if (!bodyUserId) {
+            return res.status(400).json({ error: 'El campo "userId" es requerido' });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(bodyUserId)) {
+            return res.status(400).json({ error: 'El "userId" no es un _id de usuario válido' });
+        }
+
+        const user = await User.findById(bodyUserId).select('_id userId userName');
+
+        if (!user) {
+            return res.status(404).json({ error: 'El usuario especificado no existe' });
+        }
+
+        const payload = buildPayload({ ...req.body, userName: user.userName });
+
+        payload.quoteNum = await generateQuoteNumber(user.userId);
+
         const quote = await Quote.create(payload);
 
         await logEvent({
@@ -184,7 +205,7 @@ exports.getQuotes = async (req, res) => {
 
         const filters = {};
 
-        if (clientName)  filters.clientName = new RegExp(clientName, 'i');
+        if (clientName) filters.clientName = new RegExp(clientName, 'i');
 
         if (quoteNum) filters.quoteNum = new RegExp(quoteNum, 'i');
 
@@ -239,13 +260,36 @@ exports.getQuoteById = async (req, res) => {
 
 exports.updateQuote = async (req, res) => {
     try {
+        const bodyUserId = req.userId;
         const existing = await Quote.findById(req.params.id);
 
-        if (!existing) return res.status(404).json({ error: 'Cotización no encontrada' });
+        if (!existing) {
+            return res.status(404).json({ error: 'Cotización no encontrada' });
+        }
 
-        const payload = buildPayload({ ...existing.toObject(), ...req.body }, true);
+        const data = { ...existing.toObject(), ...req.body };
 
-        if (!payload.createdAt) delete payload.createdAt;
+        if (data.userId) {
+            if (!mongoose.Types.ObjectId.isValid(data.userId)) {
+                return res.status(400).json({ error: 'El "userId" no es un _id de usuario válido' });
+            }
+
+            const user = await User.findById(data.userId).select('_id userId userName');
+
+            if (!user) {
+                return res.status(404).json({ error: 'El usuario especificado no existe' });
+            }
+
+            data.userId = user._id.toString();
+        }
+
+        data.quoteNum = existing.quoteNum;
+
+        const payload = buildPayload(data, true);
+
+        if (!payload.createdAt) {
+            delete payload.createdAt;
+        }
 
         const updated = await Quote.findByIdAndUpdate(
             req.params.id,
@@ -271,9 +315,63 @@ exports.updateQuote = async (req, res) => {
     } catch (error) {
         const dup = translateDupKeyError(error);
 
-        if (dup) return res.status(400).json({ error: dup });
+        if (dup) {
+            return res.status(400).json({ error: dup });
+        }
 
-        return res.status(400).json({ error: error.message || 'Error al actualizar la cotización' });
+        return res.status(400).json({
+            error: error.message || 'Error al actualizar la cotización'
+        });
+    }
+};
+
+exports.deleteQuotes = async (req, res) => {
+    try {
+        if (req.userRole !== 'admin') {
+            return res.status(403).json({ error: 'No tienes permisos para eliminar cotizaciones' });
+        }
+
+        const { ids } = req.body;
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'Debes proporcionar al menos una cotización para eliminar' });
+        }
+
+        const invalidIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
+
+        if (invalidIds.length) {
+            return res.status(400).json({ error: 'Uno o más IDs de cotización no son válidos' });
+        }
+
+        const quotes = await Quote.find({ _id: { $in: ids } });
+
+        if (!quotes.length) {
+            return res.status(404).json({ error: 'No se encontraron las cotizaciones seleccionadas' });
+        }
+
+        await Quote.deleteMany({ _id: { $in: ids } });
+
+        for (const quote of quotes) {
+            await logEvent({
+                req,
+                identifier: quote.quoteNum,
+                collectionName: 'Cotizaciones',
+                operation: 'Eliminación',
+                document: quote
+            });
+        }
+
+        return res.status(200).json({
+            message: `${quotes.length} cotización${quotes.length === 1 ? '' : 'es'} eliminada${quotes.length === 1 ? '' : 's'} correctamente`,
+            deletedCount: quotes.length,
+            quoteIds: quotes.map(quote => quote._id)
+        });
+    } catch (error) {
+        console.error('Error al eliminar cotizaciones:', error);
+
+        return res.status(500).json({
+            error: 'Error al eliminar las cotizaciones'
+        });
     }
 };
 
