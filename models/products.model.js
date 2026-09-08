@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const productSchema = new mongoose.Schema({
     type: { type: String, required: true, enum: ['GPS', 'Accesorio', 'Servicio', 'Plan'] },
     name: { type: String, required: true },
+    concept: { type: String, required: true },
     description: { type: String },
     price: { type: Number, required: true },
     priceIVA: { type: Number, required: true },

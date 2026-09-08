@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+const paymentMethodSchema = new mongoose.Schema({
+    holder: { type: String, required: true, trim: true },
+    bankName: { type: String, required: true, trim: true },
+    accountNumber: { type: String, required: true, trim: true },
+    CLABE: { type: String, required: true, trim: true },
+    cardNumber: { type: String, required: true, trim: true }
+}, { _id: false });
+
 const foreignTechnicianSchema = new mongoose.Schema({
     type: { type: String, required: true, enum: ['Local', 'Foráneo'] },
     name: { type: String, required: true },
@@ -14,6 +22,10 @@ const foreignTechnicianSchema = new mongoose.Schema({
     priceFalseReversal: { type: Number, default: 0 },
     travelExpensesPrice: { type: Number, default: 0 },
     transferPrice: { type: Number, default: 0 },
+    paymentMethods: {
+        type: [paymentMethodSchema],
+        default: []
+    },
     comments: { type: String },
 }, { versionKey: false });
 

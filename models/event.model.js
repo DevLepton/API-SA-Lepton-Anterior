@@ -11,18 +11,11 @@ const eventSchema = new mongoose.Schema({
     finalValues: { type: mongoose.Schema.Types.Mixed, required: true },
 
     // snapshot del usuario que ejecutó la acción
-    user: {
-        _id: { type: mongoose.Schema.Types.ObjectId },
-        email: String,
-        userName: String,
-        role: String,
-    },
+    user: { _id: { type: mongoose.Schema.Types.ObjectId }, email: String, userName: String, role: String, },
 
-    request: {
-        method: String,
-        path: String,
-        ip: String,
-    },
+    request: { method: String, path: String, ip: String, },
+
+    eventComments: { type: String, default: null },
 
     createdAt: { type: Date, default: Date.now },
 }, { versionKey: false });

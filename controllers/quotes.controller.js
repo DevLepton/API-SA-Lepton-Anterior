@@ -78,6 +78,7 @@ function buildProducts(products) {
 
         return {
             name: String(item.name).trim(),
+            concept: String(item.concept).trim(),
             description: String(item.description ?? '').trim() || null,
             type: String(item.type ?? '').trim() || null,
             price: toNumber(item.price, `products[${index}].price`, { required: true }),

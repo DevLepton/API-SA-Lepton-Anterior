@@ -68,6 +68,7 @@ function buildPayload(body, isUpdate = false) {
     priceFalseReversal,
     travelExpensesPrice,
     transferPrice,
+    paymentMethods,
     comments
   } = body;
 
@@ -76,6 +77,16 @@ function buildPayload(body, isUpdate = false) {
   if (!isUpdate || finalType !== undefined) validateType(finalType);
   if (!isUpdate && !name) throw new Error('El campo "name" es requerido');
   if (!isUpdate && !cel) throw new Error('El campo "cel" es requerido');
+
+  const parsedPaymentMethods = Array.isArray(paymentMethods)
+        ? paymentMethods.map(item => ({
+            holder: String(item.holder ?? '').trim(),
+            bankName: String(item.bankName ?? '').trim(),
+            accountNumber: String(item.accountNumber ?? '').trim(),
+            CLABE: String(item.CLABE ?? '').trim(),
+            cardNumber: String(item.cardNumber ?? '').trim()
+        }))
+        : [];
 
   return {
     type: finalType,
@@ -91,6 +102,7 @@ function buildPayload(body, isUpdate = false) {
     priceFalseReversal: toNumberOrDefault(priceFalseReversal),
     travelExpensesPrice: toNumberOrDefault(travelExpensesPrice),
     transferPrice: toNumberOrDefault(transferPrice),
+    paymentMethods: parsedPaymentMethods,
     comments: String(comments ?? '').trim() || null
   };
 }
@@ -139,7 +151,7 @@ exports.getForeignTechnicians = async (req, res) => {
       message: 'Tecnicos foraneos obtenidos con exito',
       filters,
       total: items.length,
-      data: items
+      data: items.reverse()
     });
   } catch (error) {
     return res.status(500).json({

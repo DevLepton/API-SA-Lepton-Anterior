@@ -51,6 +51,7 @@ function buildPayload(body, isUpdate = false) {
   const {
     type,
     name,
+    concept,
     description,
     price,
     priceIVA,
@@ -69,6 +70,7 @@ function buildPayload(body, isUpdate = false) {
   return {
     type,
     name: String(name ?? '').trim(),
+    concept: String(concept ?? '').trim(),
     description: String(description ?? '').trim() || null,
     price: toNumber(price, 'price', { required: true }),
     priceIVA: toNumber(priceIVA, 'priceIVA', { required: true }),
@@ -113,7 +115,7 @@ exports.getProducts = async (req, res) => {
     if (q) {
       const safe = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const rx = new RegExp(safe, 'i');
-      filters.$or = [{ name: rx }, { description: rx }, { comments: rx }];
+      filters.$or = [{ name: rx }, { concept: rx }, { description: rx }, { comments: rx }];
     }
 
     const items = await Product.find(filters);
@@ -153,7 +155,7 @@ exports.updateProduct = async (req, res) => {
 
     const payload = buildPayload({ ...existing.toObject(), ...req.body }, true);
     if (!payload.createdAt) delete payload.createdAt;
-
+    
     const updated = await Product.findByIdAndUpdate(req.params.id, payload, {
       new: true,
       runValidators: true
