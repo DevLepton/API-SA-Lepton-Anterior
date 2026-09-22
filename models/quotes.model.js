@@ -43,6 +43,7 @@ const quoteSchema = new mongoose.Schema({
 
     billable: { type: Boolean, default: false },
     bankName: { type: String, default: null, trim: true },
+    rfc: { type: String, default: null, trim: true },
     paymentMethodHolder: { type: String, default: null, trim: true },
     accountNumber: { type: String, default: null, trim: true },
     CLABE: { type: String, default: null, trim: true },

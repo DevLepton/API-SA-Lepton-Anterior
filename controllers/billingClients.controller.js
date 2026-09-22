@@ -1,8 +1,14 @@
+const mongoose = require('mongoose');
 const BillingClient = require('../models/billingClient.model');
+const Label = require('../models/labels.model');
 const { logEvent } = require('../utils/events.logger');
+const BankAccount = require('../models/bankAccounts.model');
 
 const TYPES = ['client', 'subClient'];
 const VOUCHER_TYPES = ['Recibo', 'Factura'];
+const PERIODICITY_ENUM = ['annual', 'monthly'];
+const CONTRACT_TYPE_ENUM = ['free', 'comodato', 'lease'];
+const ADDRESS_TYPE_ENUM = ['fiscal', 'soporte', 'cobranza', 'titular'];
 
 function toNumber(value, field, options = {}) {
   const { required = false, defaultValue = undefined, min, max } = options;
@@ -40,7 +46,8 @@ function normalizePaymentContacts(contacts) {
       name,
       email: String(contact?.email ?? '').trim(),
       cel: String(contact?.cel ?? '').trim(),
-      notes: String(contact?.notes ?? '').trim()
+      notes: String(contact?.notes ?? '').trim(),
+      type: String(contact?.type ?? '').trim()
     };
   });
 }
@@ -61,7 +68,67 @@ function translateDupKeyError(err) {
   return null;
 }
 
-function buildPayload(body, isUpdate = false) {
+async function normalizeLabels(labels) {
+  if (labels === null || labels === undefined || labels === '') return [];
+
+  if (!Array.isArray(labels)) {
+    throw new Error('El campo "labels" debe ser un arreglo');
+  }
+
+  const invalidIds = labels.filter(id => !mongoose.Types.ObjectId.isValid(id));
+
+  if (invalidIds.length) {
+    throw new Error('Uno o más IDs de etiqueta no son válidos');
+  }
+
+  const uniqueIds = [...new Set(labels.map(id => String(id)))];
+
+  const existingLabels = await Label.find({ _id: { $in: uniqueIds } }).select('_id');
+
+  const existingIds = new Set(existingLabels.map(label => label._id.toString()));
+
+  const missingIds = uniqueIds.filter(id => !existingIds.has(id));
+
+  if (missingIds.length) {
+    throw new Error(`Una o más etiquetas no existen: ${missingIds.join(', ')}`);
+  }
+
+  return uniqueIds;
+}
+
+function normalizeAddresses(addresses) {
+  if (addresses === null || addresses === undefined || addresses === '') {
+    return [];
+  }
+
+  if (!Array.isArray(addresses)) {
+    throw new Error('El campo "addresses" debe ser un arreglo');
+  }
+
+  return addresses.map((address) => {
+    if (!address?.type) {
+      throw new Error('Cada domicilio debe incluir "type"');
+    }
+
+    if (!ADDRESS_TYPE_ENUM.includes(address.type)) {
+      throw new Error(`"type" de domicilio inválido. Valores permitidos: ${ADDRESS_TYPE_ENUM.join(', ')}`);
+    }
+
+    return {
+      type: address.type,
+      cp: toNumber(address.cp, 'addresses.cp'),
+      suburb: String(address.suburb ?? '').trim(),
+      street: String(address.street ?? '').trim(),
+      streetNumber: String(address.streetNumber ?? '').trim(),
+      locality: String(address.locality ?? '').trim(),
+      state: String(address.state ?? '').trim(),
+      country: String(address.country ?? 'México').trim(),
+      comments: String(address.comments ?? '').trim()
+    };
+  });
+}
+
+async function buildPayload(body, isUpdate = false) {
   const {
     type,
     userId,
@@ -70,21 +137,20 @@ function buildPayload(body, isUpdate = false) {
     billingName,
     paymentContacts,
     voucherType,
+    issuer,
     cutoffDay,
     companyName,
     RFC,
     useInvoice,
     taxRegime,
     email,
-    cp,
-    street,
-    streetNumber,
-    suburb,
-    locality,
-    state,
-    country,
     discounts,
     blacklist,
+    periodicity,
+    comments,
+    labels,
+    contractType,
+    addresses,
     createdAt
   } = body;
 
@@ -101,10 +167,29 @@ function buildPayload(body, isUpdate = false) {
   if (normalizedType === 'subClient' && !billingClientFather) {
     throw new Error('El campo "billingClientFather" es requerido para subclientes');
   }
-  if (!isUpdate && !billingName) throw new Error('El campo "billingName" es requerido');
+
+  if (!isUpdate && !billingName) {
+    throw new Error('El campo "billingName" es requerido');
+  }
 
   if (voucherType && !VOUCHER_TYPES.includes(voucherType)) {
     throw new Error(`"voucherType" invalido. Valores permitidos: ${VOUCHER_TYPES.join(', ')}`);
+  }
+
+  if (periodicity !== undefined && periodicity !== null && periodicity !== '' && !PERIODICITY_ENUM.includes(periodicity)) {
+    throw new Error(`"periodicity" inválida. Valores permitidos: ${PERIODICITY_ENUM.join(', ')}`);
+  }
+
+  if (contractType !== undefined && contractType !== null && contractType !== '' && !CONTRACT_TYPE_ENUM.includes(contractType)) {
+    throw new Error(`"contractType" inválido. Valores permitidos: ${CONTRACT_TYPE_ENUM.join(', ')}`);
+  }
+
+  if (issuer) {
+    if (!mongoose.Types.ObjectId.isValid(issuer)) throw new Error('El ID de la cuenta bancaria no es válido');
+
+    const bankAccount = await BankAccount.findById(issuer).select('_id');
+
+    if (!bankAccount) throw new Error('La cuenta bancaria seleccionada no existe');
   }
 
   return {
@@ -115,28 +200,27 @@ function buildPayload(body, isUpdate = false) {
     billingName: String(billingName ?? '').trim(),
     paymentContacts: normalizePaymentContacts(paymentContacts),
     voucherType: voucherType || 'Recibo',
+    issuer: issuer || null,
     cutoffDay: toNumber(cutoffDay, 'cutoffDay', { defaultValue: 1, min: 1, max: 31 }),
     companyName: String(companyName ?? '').trim(),
     RFC: String(RFC ?? '').trim(),
     useInvoice: String(useInvoice ?? '').trim(),
     taxRegime: String(taxRegime ?? '').trim(),
     email: String(email ?? '').trim(),
-    cp: toNumber(cp, 'cp'),
-    street: String(street ?? '').trim(),
-    streetNumber: String(streetNumber ?? '').trim(),
-    suburb: String(suburb ?? '').trim(),
-    locality: String(locality ?? '').trim(),
-    state: String(state ?? '').trim(),
-    country: String(country ?? 'Mexico').trim(),
     discounts: normalizeDiscounts(discounts),
     blacklist: toBoolean(blacklist, false),
+    periodicity: periodicity || 'monthly',
+    comments: String(comments ?? '').trim(),
+    labels: await normalizeLabels(labels),
+    contractType: contractType || 'free',
+    addresses: normalizeAddresses(addresses),
     createdAt: createdAt ? new Date(createdAt) : undefined
   };
 }
 
 exports.createBillingClient = async (req, res) => {
   try {
-    const payload = buildPayload(req.body, false);
+    const payload = await buildPayload(req.body, false);
     const billingClient = await BillingClient.create(payload);
 
     if (billingClient.type === 'subClient' && billingClient.billingClientFather
@@ -154,7 +238,7 @@ exports.createBillingClient = async (req, res) => {
     await logEvent({
       req,
       identifier: billingClient.billingName,
-      collectionName: 'BillingClients',
+      collectionName: 'Clientes de cobranza',
       operation: 'Creación',
       document: billingClient
     });
@@ -227,10 +311,16 @@ exports.getBillingClientById = async (req, res) => {
 exports.updateBillingClient = async (req, res) => {
   try {
     const existing = await BillingClient.findById(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Cliente de facturación no encontrado' });
 
-    const payload = buildPayload({ ...existing.toObject(), ...req.body }, true);
-    if (!payload.createdAt) delete payload.createdAt;
+    if (!existing) {
+      return res.status(404).json({ error: 'Cliente de facturación no encontrado' });
+    }
+
+    const payload = await buildPayload({ ...existing.toObject(), ...req.body }, true);
+
+    if (!payload.createdAt) {
+      delete payload.createdAt;
+    }
 
     const oldType = existing.type;
     const newType = payload.type;
@@ -238,14 +328,26 @@ exports.updateBillingClient = async (req, res) => {
     const oldFather = existing.billingClientFather?.toString() || null;
     const newFather = payload.billingClientFather?.toString() || null;
 
-    const updated = await BillingClient.findByIdAndUpdate(
-      req.params.id,
-      payload,
-      {
-        new: true,
-        runValidators: true
-      }
-    );
+    // CHANGE LOG
+    const changeLog = String(req.body.changeLog ?? '').trim();
+
+    if (changeLog) {
+      payload.changeLog = [
+        ...(existing.changeLog || []),
+        {
+          log: changeLog,
+          date: new Date(),
+          userName: String(
+            req.userName ?? ''
+          ).trim()
+        }
+      ];
+    } else {
+      payload.changeLog =
+        existing.changeLog || [];
+    }
+
+    const updated = await BillingClient.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
 
     // Antes era subcliente y ya no lo es
     if (oldType === 'subClient' && newType !== 'subClient' && oldFather) {
@@ -299,18 +401,20 @@ exports.updateBillingClient = async (req, res) => {
     await logEvent({
       req,
       identifier: updated.billingName,
-      collectionName: 'ClientesCobranza',
+      collectionName: 'Clientes de cobranza',
       operation: 'Actualización',
       document: updated
     });
 
-    return res.status(200).json({
-      message: 'Cliente de facturación actualizado correctamente',
-      data: updated
-    });
+    return res.status(200).json({ message: 'Cliente de facturación actualizado correctamente', data: updated });
+
   } catch (error) {
     const dup = translateDupKeyError(error);
-    if (dup) return res.status(400).json({ error: dup });
+
+    if (dup) {
+      return res.status(400).json({ error: dup });
+    }
+
     return res.status(400).json({ error: error.message || 'Error al actualizar el cliente de cobranza' });
   }
 };
@@ -382,7 +486,7 @@ exports.deleteBillingClient = async (req, res) => {
     await logEvent({
       req,
       identifier: billingClient.billingName,
-      collectionName: 'ClientesCobranza',
+      collectionName: 'Clientes de cobranza',
       operation: 'Eliminación',
       document: billingClient
     });

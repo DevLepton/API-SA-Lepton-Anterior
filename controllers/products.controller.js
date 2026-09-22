@@ -67,6 +67,7 @@ function buildPayload(body, isUpdate = false) {
   };
   if (!isUpdate && !name) throw new Error('El campo "name" es requerido');
 
+
   return {
     type,
     name: String(name ?? '').trim(),
@@ -151,15 +152,56 @@ exports.getProductById = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     const existing = await Product.findById(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    const payload = buildPayload({ ...existing.toObject(), ...req.body }, true);
-    if (!payload.createdAt) delete payload.createdAt;
-    
-    const updated = await Product.findByIdAndUpdate(req.params.id, payload, {
-      new: true,
-      runValidators: true
-    });
+    if (!existing) {
+      return res.status(404).json({
+        error: 'Producto no encontrado'
+      });
+    }
+
+    const payload = buildPayload(
+      { ...existing.toObject(), ...req.body },
+      true
+    );
+
+    if (!payload.createdAt) {
+      delete payload.createdAt;
+    }
+
+    const priceDiscountChanged =
+      Number(payload.price) !== Number(existing.price) ||
+      Number(payload.priceIVA) !== Number(existing.priceIVA) ||
+      Number(payload.discount) !== Number(existing.discount);
+
+    const changeLog = String(req.body.changeLog ?? '').trim();
+
+    // Si cambió precio/descuento, el registro es obligatorio.
+    if (priceDiscountChanged && !changeLog) {
+      return res.status(400).json({
+        error: 'Debes indicar el motivo del cambio de precio o descuento'
+      });
+    }
+
+    // Si se mandó un registro, se agrega al historial, aunque no haya cambiado ningún otro dato.
+    if (changeLog) {
+      payload.changeLog = [
+        ...(existing.changeLog || []),
+        {
+          log: changeLog,
+          date: new Date(),
+          userName: String(req.userName ?? '').trim()
+        }
+      ];
+    } else {
+      // Mantener el historial existente.
+      payload.changeLog = existing.changeLog || [];
+    }
+
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      payload,
+      { new: true, runValidators: true }
+    );
 
     await logEvent({
       req,
@@ -173,10 +215,17 @@ exports.updateProduct = async (req, res) => {
       message: 'Producto actualizado correctamente',
       data: updated
     });
+
   } catch (error) {
     const dup = translateDupKeyError(error);
-    if (dup) return res.status(400).json({ error: dup });
-    return res.status(400).json({ error: error.message || 'Error al actualizar el producto' });
+
+    if (dup) {
+      return res.status(400).json({ error: dup });
+    }
+
+    return res.status(400).json({
+      error: error.message || 'Error al actualizar el producto'
+    });
   }
 };
 
@@ -203,44 +252,44 @@ exports.deleteProduct = async (req, res) => {
 };
 
 exports.deleteProducts = async (req, res) => {
-    try {
-        const { ids } = req.body;
+  try {
+    const { ids } = req.body;
 
-        if (!Array.isArray(ids) || ids.length === 0) {
-            return res.status(400).json({ error: 'Debes proporcionar al menos un producto para eliminar' });
-        }
-
-        const invalidIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
-
-        if (invalidIds.length) {
-            return res.status(400).json({ error: 'Uno o más IDs de producto no son válidos' });
-        }
-
-        const products = await Product.find({ _id: { $in: ids } });
-
-        if (!products.length) {
-            return res.status(404).json({ error: 'No se encontraron los productos seleccionados' });
-        }
-
-        await Product.deleteMany({ _id: { $in: ids } });
-
-        for (const product of products) {
-            await logEvent({
-                req,
-                identifier: product.name,
-                collectionName: 'Productos',
-                operation: 'Eliminación',
-                document: product
-            });
-        }
-
-        return res.status(200).json({
-            message: `${products.length} producto${products.length === 1 ? '' : 's'} eliminado${products.length === 1 ? '' : 's'} correctamente`,
-            deletedCount: products.length,
-            productIds: products.map(product => product._id)
-        });
-    } catch (error) {
-        console.error('Error al eliminar productos:', error);
-        return res.status(500).json({ error: 'Error al eliminar los productos' });
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Debes proporcionar al menos un producto para eliminar' });
     }
+
+    const invalidIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
+
+    if (invalidIds.length) {
+      return res.status(400).json({ error: 'Uno o más IDs de producto no son válidos' });
+    }
+
+    const products = await Product.find({ _id: { $in: ids } });
+
+    if (!products.length) {
+      return res.status(404).json({ error: 'No se encontraron los productos seleccionados' });
+    }
+
+    await Product.deleteMany({ _id: { $in: ids } });
+
+    for (const product of products) {
+      await logEvent({
+        req,
+        identifier: product.name,
+        collectionName: 'Productos',
+        operation: 'Eliminación',
+        document: product
+      });
+    }
+
+    return res.status(200).json({
+      message: `${products.length} producto${products.length === 1 ? '' : 's'} eliminado${products.length === 1 ? '' : 's'} correctamente`,
+      deletedCount: products.length,
+      productIds: products.map(product => product._id)
+    });
+  } catch (error) {
+    console.error('Error al eliminar productos:', error);
+    return res.status(500).json({ error: 'Error al eliminar los productos' });
+  }
 };

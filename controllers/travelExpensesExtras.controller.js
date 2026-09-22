@@ -28,7 +28,6 @@ function translateDupKeyError(err) {
 }
 
 function buildPayload(body) {
-
     const {
         kmRate,
         lodging,
@@ -65,6 +64,7 @@ exports.createTravelExpenseExtra = async (req, res) => {
             message: 'Registro creado correctamente',
             data: item
         });
+
     } catch (error) {
         const dup = translateDupKeyError(error);
 
@@ -96,6 +96,7 @@ exports.getTravelExpenseExtras = async (req, res) => {
             message: 'Registro obtenido con éxito',
             data: item
         });
+
     } catch (error) {
         return res.status(500).json({
             message: 'Error al consultar el registro',
@@ -118,6 +119,7 @@ exports.getTravelExpenseExtraById = async (req, res) => {
             message: 'Registro obtenido con éxito',
             data: item
         });
+
     } catch (error) {
         return res.status(500).json({
             error: 'Error al consultar el registro'
@@ -144,6 +146,38 @@ exports.updateTravelExpenseExtra = async (req, res) => {
             delete payload.createdAt;
         }
 
+        //Detectar si cambió cualquiera de los valores de Extras.
+        const extrasChanged =
+            Number(payload.kmRate) !== Number(existing.kmRate) ||
+            Number(payload.lodging) !== Number(existing.lodging) ||
+            Number(payload.breakfast) !== Number(existing.breakfast) ||
+            Number(payload.lunch) !== Number(existing.lunch) ||
+            Number(payload.dinner) !== Number(existing.dinner);
+
+        const changeLog = String(req.body.changeLog ?? '').trim();
+
+        //Si cambió cualquiera de los valores de Extras, el registro del cambio es obligatorio.
+        if (extrasChanged && !changeLog) {
+            return res.status(400).json({
+                error: 'Debes indicar el motivo del cambio de extras'
+            });
+        }
+
+        // Si se mandó un registro, se agrega al historial.
+        if (changeLog) {
+            payload.changeLog = [
+                ...(existing.changeLog || []),
+                {
+                    log: changeLog,
+                    date: new Date(),
+                    userName: String(req.userName ?? '').trim()
+                }
+            ];
+        } else {
+            // Mantener el historial existente.
+            payload.changeLog = existing.changeLog || [];
+        }
+
         const updated = await TravelExpenseExtra.findByIdAndUpdate(
             req.params.id,
             payload,
@@ -165,6 +199,7 @@ exports.updateTravelExpenseExtra = async (req, res) => {
             message: 'Registro actualizado correctamente',
             data: updated
         });
+
     } catch (error) {
         const dup = translateDupKeyError(error);
 

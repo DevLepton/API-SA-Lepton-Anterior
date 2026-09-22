@@ -7,19 +7,22 @@ function buildPayload(body) {
         holder,
         bankName,
         accountNumber,
-        CLABE
+        CLABE,
+        rfc
     } = body;
 
     if (!holder) throw new Error('El campo "holder" es requerido');
     if (!bankName) throw new Error('El campo "bankName" es requerido');
     if (!accountNumber) throw new Error('El campo "accountNumber" es requerido');
     if (!CLABE) throw new Error('El campo "CLABE" es requerido');
+    if (!rfc) throw new Error('El campo "RFC" es requerido');
 
     return {
         holder: String(holder).trim(),
         bankName: String(bankName).trim(),
         accountNumber: String(accountNumber).trim(),
-        CLABE: String(CLABE).trim()
+        CLABE: String(CLABE).trim(),
+        rfc: String(rfc).trim(),
     };
 }
 
@@ -60,7 +63,8 @@ exports.getBankAccounts = async (req, res) => {
                 { holder: rx },
                 { bankName: rx },
                 { accountNumber: rx },
-                { CLABE: rx }
+                { CLABE: rx },
+                { rfc: rx },
             ];
         }
 

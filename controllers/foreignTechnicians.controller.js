@@ -115,7 +115,7 @@ exports.createForeignTechnician = async (req, res) => {
     await logEvent({
       req,
       identifier: technician.name,
-      collectionName: 'Tecnicos foraneos',
+      collectionName: 'Técnicos foráneos',
       operation: 'Creación',
       document: technician
     });
@@ -189,7 +189,7 @@ exports.updateForeignTechnician = async (req, res) => {
     await logEvent({
       req,
       identifier: updated.name,
-      collectionName: 'Tecnicos foraneos',
+      collectionName: 'Técnicos foráneos',
       operation: 'Actualización',
       document: updated
     });
@@ -213,7 +213,7 @@ exports.deleteForeignTechnician = async (req, res) => {
     await logEvent({
       req,
       identifier: deleted.name,
-      collectionName: 'Tecnicos foraneos',
+      collectionName: 'Técnicos foráneos',
       operation: 'Eliminación',
       document: deleted
     });
