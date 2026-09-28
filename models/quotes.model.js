@@ -19,6 +19,7 @@ const quoteSchema = new mongoose.Schema({
 
     clientName: { type: String, required: true, trim: true },
     companyName: { type: String, default: null, trim: true },
+    prospect: { type: Boolean, default: false },
     place: { type: String, default: null, trim: true },
 
     validity: { type: Date, required: true },

@@ -14,6 +14,8 @@ const productSchema = new mongoose.Schema({
     price: { type: Number, required: true },
     priceIVA: { type: Number, required: true },
     discount: { type: Number, default: 0 },
+    linkedProdModel: { type: String, default: null },
+    linkedProdType: { type: String, default: null },
     comments: { type: String, default: '' },
     changeLog: { type: [logSchema], default: [] },
     duration: {

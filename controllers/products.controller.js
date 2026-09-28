@@ -56,6 +56,8 @@ function buildPayload(body, isUpdate = false) {
     price,
     priceIVA,
     discount,
+    linkedProdModel,
+    linkedProdType,
     duration,
     comments,
     createdAt
@@ -76,6 +78,8 @@ function buildPayload(body, isUpdate = false) {
     price: toNumber(price, 'price', { required: true }),
     priceIVA: toNumber(priceIVA, 'priceIVA', { required: true }),
     discount: toNumber(discount, 'discount', { defaultValue: 0 }),
+    linkedProdModel: String(linkedProdModel ?? '').trim() || null,
+    linkedProdType: String(linkedProdType ?? '').trim() || null,
     duration: type === 'Plan' ? duration : undefined,
     comments: String(comments ?? '').trim() || null,
     createdAt: createdAt ? new Date(createdAt) : undefined
