@@ -26,6 +26,23 @@ function toNumber(value, field, options = {}) {
   return n;
 }
 
+function toDate(value, field, options = {}) {
+  const { required = false, defaultValue = null } = options;
+
+  if (value === null || value === undefined || value === '') {
+    if (required) throw new Error(`El campo "${field}" es requerido`);
+    return defaultValue;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`El campo "${field}" debe ser una fecha válida`);
+  }
+
+  return date;
+}
+
 function toBoolean(value, defaultValue = false) {
   if (value === null || value === undefined || value === '') return defaultValue;
   if (typeof value === 'boolean') return value;
@@ -138,7 +155,9 @@ async function buildPayload(body, isUpdate = false) {
     paymentContacts,
     voucherType,
     issuer,
+    hireDate,
     cutoffDay,
+    cutoffMonth,
     companyName,
     RFC,
     useInvoice,
@@ -180,6 +199,18 @@ async function buildPayload(body, isUpdate = false) {
     throw new Error(`"periodicity" inválida. Valores permitidos: ${PERIODICITY_ENUM.join(', ')}`);
   }
 
+  const normalizedPeriodicity = periodicity || 'monthly';
+
+  let normalizedCutoffMonth = null;
+
+  if (normalizedPeriodicity === 'annual') {
+    normalizedCutoffMonth = toNumber(cutoffMonth, 'cutoffMonth', {
+      required: true,
+      min: 1,
+      max: 12
+    });
+  }
+
   if (contractType !== undefined && contractType !== null && contractType !== '' && !CONTRACT_TYPE_ENUM.includes(contractType)) {
     throw new Error(`"contractType" inválido. Valores permitidos: ${CONTRACT_TYPE_ENUM.join(', ')}`);
   }
@@ -201,7 +232,9 @@ async function buildPayload(body, isUpdate = false) {
     paymentContacts: normalizePaymentContacts(paymentContacts),
     voucherType: voucherType || 'Recibo',
     issuer: issuer || null,
+    hireDate: toDate(hireDate, 'hireDate'),
     cutoffDay: toNumber(cutoffDay, 'cutoffDay', { defaultValue: 1, min: 1, max: 31 }),
+    cutoffMonth: normalizedCutoffMonth,
     companyName: String(companyName ?? '').trim(),
     RFC: String(RFC ?? '').trim(),
     useInvoice: String(useInvoice ?? '').trim(),
@@ -209,7 +242,7 @@ async function buildPayload(body, isUpdate = false) {
     email: String(email ?? '').trim(),
     discounts: normalizeDiscounts(discounts),
     blacklist: toBoolean(blacklist, false),
-    periodicity: periodicity || 'monthly',
+    periodicity: normalizedPeriodicity,
     comments: String(comments ?? '').trim(),
     labels: await normalizeLabels(labels),
     contractType: contractType || 'free',
