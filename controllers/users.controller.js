@@ -21,7 +21,8 @@ const ROLE_PREFIX = {
   finanzas: 'FZ',
   inventario: 'IN',
   cx: 'CX',
-  gc: 'GC'
+  gc: 'GC',
+  rh: 'RH'
 };
 
 async function generateUserId(role) {
