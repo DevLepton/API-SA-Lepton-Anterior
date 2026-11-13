@@ -20,7 +20,7 @@ const productSchema = new mongoose.Schema({
     changeLog: { type: [logSchema], default: [] },
     duration: {
         type: String,
-        enum: ['1 mes', '3 meses', '6 meses', '1 año'],
+        enum: ['1 mes', '3 meses', '6 meses', '1 año', '18 meses', '2 años'],
         required: function () {
             return this.type === 'Plan';
         },

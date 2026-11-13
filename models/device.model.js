@@ -47,7 +47,7 @@ const deviceSchema = new mongoose.Schema({
   entryDate: { type: Date, required: true },
 
   installationDate: { type: Date, default: null, alias: 'instalationDate' },
-  client: { type: String, trim: true, default: null },
+  client: { type: Number, trim: true, default: null },
   comments: { type: String, trim: true, default: null },
 }, { versionKey: false });
 

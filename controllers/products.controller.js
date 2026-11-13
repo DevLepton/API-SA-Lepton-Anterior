@@ -4,7 +4,7 @@ const { logEvent } = require('../utils/events.logger');
 
 const TYPE_ENUM = ['GPS', 'Accesorio', 'Servicio', 'Plan'];
 
-const DURATION_ENUM = ['1 mes', '3 meses', '6 meses', '1 año'];
+const DURATION_ENUM = ['1 mes', '3 meses', '6 meses', '1 año', '18 meses', '2 años'];
 
 function validateType(type) {
   if (!type) throw new Error('El campo "type" es requerido');

@@ -1,4 +1,4 @@
-// controllers/clients.controller.js
+const https = require('https');
 
 const NAVIXY_HASH_URL = 'https://api.navixy.com/v2/panel/account/auth?login=9188&password=LeP102012';
 const CLIENTS_URL = 'https://api.navixy.com/v2/panel/user/list?hash=';
@@ -98,12 +98,13 @@ exports.updateExcludedAccounts = async (req, res) => {
 exports.getClientsList = async (req, res) => {
   try {
     const hashData = await safeFetch(NAVIXY_HASH_URL);
+    const hash = hashData?.hash;
 
-    if (!hashData?.hash) {
+    if (!hash) {
       throw new Error('No se pudo obtener hash de Navixy');
     }
 
-    const clientsData = await safeFetch(CLIENTS_URL + hashData.hash);
+    const clientsData = await safeFetch(CLIENTS_URL + hash);
 
     if (!clientsData) {
       throw new Error('No se pudo obtener la lista de clientes');
@@ -165,22 +166,26 @@ exports.getFullClientsData = async (req, res) => {
     // ===== HASH =====
     send({ progress: 5, message: 'Obteniendo hash...' });
 
-    const hashRes = await fetch(NAVIXY_HASH_URL);
-    const { hash } = await hashRes.json();
+    const hashData = await safeFetch(NAVIXY_HASH_URL);
+    const hash = hashData?.hash;
+
+    if (!hash) {
+      throw new Error('No se pudo obtener hash de Navixy');
+    }
 
     // ===== BASE DATA =====
     send({ progress: 15, message: 'Cargando clientes y trackers...' });
 
-    const [clientsRes, trackersRes, plansRes, config] = await Promise.all([
-      fetch(CLIENTS_URL + hash),
-      fetch(TRACKERS_URL + hash),
-      fetch(PLANS_URL + hash),
+    const [clientsData, trackersData, plansData, config] = await Promise.all([
+      safeFetch(CLIENTS_URL + hash),
+      safeFetch(TRACKERS_URL + hash),
+      safeFetch(PLANS_URL + hash),
       ClientConfig.findOne()
     ]);
 
-    const clientsData = await clientsRes.json();
-    const trackersData = await trackersRes.json();
-    const plansData = await plansRes.json();
+    if (!clientsData || !trackersData || !plansData) {
+      throw new Error('Error al obtener datos de Navixy');
+    }
 
     const hashList = config?.activeClients || {};
 
@@ -448,25 +453,63 @@ function mapTracker(t, planById) {
   };
 }
 
+// async function safeFetch(url, retries = 3) {
+//   try {
+//     const res = await fetch(url);
+
+//     if (!res.ok) {
+//       throw new Error(`HTTP ${res.status}`);
+//     }
+
+//     return await res.json();
+
+//   } catch (err) {
+//     if (retries > 0) {
+//       await new Promise(r => setTimeout(r, 1500));
+//       return safeFetch(url, retries - 1);
+//     }
+
+//     return null;
+//   }
+// }
+
 async function safeFetch(url, retries = 3) {
-  try {
-    const res = await fetch(url);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const { status, body } = await new Promise((resolve, reject) => {
+        const req = https.get(url, { timeout: 30000 }, res => {
+          let data = '';
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+          res.setEncoding('utf8');
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ status: res.statusCode, body: data }));
+          res.on('aborted', () => reject(new Error('Respuesta interrumpida')));
+          res.on('error', reject);
+        });
+
+        req.on('timeout', () => req.destroy(new Error('Timeout HTTP')));
+        req.on('error', reject);
+      });
+
+      if (status < 200 || status >= 300) {
+        throw new Error(`HTTP ${status}: ${body.slice(0, 200)}`);
+      }
+
+      return body ? JSON.parse(body) : null;
+
+    } catch (err) {
+      if (attempt === retries) {
+        console.error('safeFetch:', err.message, url);
+        return null;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
-
-    return await res.json();
-
-  } catch (err) {
-    if (retries > 0) {
-      await new Promise(r => setTimeout(r, 1500));
-      return safeFetch(url, retries - 1);
-    }
-
-    return null;
   }
+
+  return null;
 }
+
 
 function chunkArray(arr, size) {
   const res = [];
@@ -638,12 +681,11 @@ exports.getNavixyTrackersByUser = async (req, res) => {
     const userId = Number(req.params.userId);
 
     const hashData = await safeFetch(NAVIXY_HASH_URL);
+    const hash = hashData?.hash;
 
-    if (!hashData?.hash) {
+    if (!hash) {
       throw new Error('No se pudo obtener hash de Navixy');
     }
-
-    const hash = hashData.hash;
 
     const trackersData = await safeFetch(TRACKERS_URL + hash);
 
@@ -662,6 +704,7 @@ exports.getNavixyTrackersByUser = async (req, res) => {
       total: userTrackers.length,
       trackers: userTrackers.map(t => ({
         id: t.id,
+        userId: t.user_id,
         imei: t.source?.device_id || '',
         label: t.label
       }))

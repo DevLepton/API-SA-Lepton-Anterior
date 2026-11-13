@@ -40,7 +40,8 @@ const quoteSchema = new mongoose.Schema({
     units: { type: Number, default: null },
     model: { type: String, default: null },
 
-    paymentNextMonthly: { type: Number, default: null },
+    paymentNextPeriod: { type: Number, default: null },
+    period: { type: String, enum: ['monthly', 'quarterly', 'biannual', 'annual', 'semiannual', 'biennial'], default: null },
 
     billable: { type: Boolean, default: false },
     bankName: { type: String, default: null, trim: true },
